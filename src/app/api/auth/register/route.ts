@@ -22,7 +22,7 @@ async function getGoogleSheetsClient() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, email, phone, password, role, membershipType, skills, availability, emergencyContact, emergencyPhone } = body;
+    const { name, email, phone, password, role, membershipType } = body;
 
     if (!name || !email || !phone || !password || !role) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     const userId = `user_${Date.now()}`;
     const createdAt = new Date().toISOString();
 
-    // Create user row
+    // Create user row (8 columns: ID | Name | Email | Phone | Password | Role | MembershipType | CreatedAt)
     const rowData = [
       userId,
       name,
@@ -56,16 +56,12 @@ export async function POST(request: NextRequest) {
       password, // In production, this should be hashed!
       role,
       membershipType || '',
-      JSON.stringify(skills || []),
-      JSON.stringify(availability || []),
-      emergencyContact || '',
-      emergencyPhone || '',
       createdAt,
     ];
 
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: 'Users!A:L',
+      range: 'Users!A:H',
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: [rowData] },
     });
@@ -77,10 +73,6 @@ export async function POST(request: NextRequest) {
       phone,
       role,
       membershipType: membershipType || undefined,
-      skills: skills || [],
-      availability: availability || [],
-      emergencyContact,
-      emergencyPhone,
       createdAt,
     };
 

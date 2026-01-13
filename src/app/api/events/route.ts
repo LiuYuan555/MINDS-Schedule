@@ -20,6 +20,16 @@ async function getGoogleSheetsClient() {
   return { sheets, spreadsheetId };
 }
 
+// Helper function to get the sheetId for a given sheet name
+async function getSheetId(sheets: ReturnType<typeof google.sheets>, spreadsheetId: string, sheetName: string): Promise<number> {
+  const response = await sheets.spreadsheets.get({ spreadsheetId });
+  const sheet = response.data.sheets?.find(s => s.properties?.title === sheetName);
+  if (!sheet || sheet.properties?.sheetId === undefined || sheet.properties?.sheetId === null) {
+    throw new Error(`Sheet "${sheetName}" not found`);
+  }
+  return sheet.properties.sheetId;
+}
+
 // GET /api/events - Fetch all events from Google Sheets
 export async function GET() {
   try {
@@ -47,10 +57,10 @@ export async function GET() {
       caregiverRequired: row[11] === 'true',
       caregiverPaymentRequired: row[12] === 'true',
       caregiverPaymentAmount: row[13] ? parseFloat(row[13]) : undefined,
-      volunteersNeeded: row[14] ? parseInt(row[14], 10) : 0,
-      currentVolunteers: row[15] ? parseInt(row[15], 10) : 0,
-      skillLevel: row[16] || 'all',
-      ageRestriction: row[17] || undefined,
+      ageRestriction: row[14] || undefined,
+      skillLevel: row[15] || 'all',
+      volunteersNeeded: row[16] ? parseInt(row[16], 10) : 0,
+      currentVolunteers: row[17] ? parseInt(row[17], 10) : 0,
     }));
 
     return NextResponse.json({ events });
@@ -98,11 +108,11 @@ export async function POST(request: NextRequest) {
       wheelchairAccessible ? 'true' : 'false',
       caregiverRequired ? 'true' : 'false',
       caregiverPaymentRequired ? 'true' : 'false',
-      caregiverPaymentAmount || '',
+      caregiverPaymentAmount || 'Nil',
+      ageRestriction || 'Nil',
+      skillLevel || 'all',
       volunteersNeeded || 0,
       0, // currentVolunteers starts at 0
-      skillLevel || 'all',
-      ageRestriction || '',
     ];
 
     await sheets.spreadsheets.values.append({
@@ -166,6 +176,9 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    // Get the actual sheetId for the Events sheet
+    const eventsSheetId = await getSheetId(sheets, spreadsheetId, 'Events');
+
     // Delete the row (rowIndex + 1 because sheets are 1-indexed)
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId,
@@ -174,7 +187,7 @@ export async function DELETE(request: NextRequest) {
           {
             deleteDimension: {
               range: {
-                sheetId: 0, // Assumes Events is the first sheet
+                sheetId: eventsSheetId,
                 dimension: 'ROWS',
                 startIndex: rowIndex,
                 endIndex: rowIndex + 1,
@@ -233,13 +246,14 @@ export async function PUT(request: NextRequest) {
     // Get current signups and volunteers count to preserve them
     const currentDataResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `Events!J${rowIndex + 1}:P${rowIndex + 1}`,
+      range: `Events!J${rowIndex + 1}:R${rowIndex + 1}`,
     });
     const currentData = currentDataResponse.data.values?.[0] || [];
     const currentSignups = currentData[0] || 0;
-    const currentVolunteers = currentData[6] || 0;
+    const currentVolunteers = currentData[8] || 0;
 
     // Update the row (rowIndex + 1 because sheets are 1-indexed)
+    // Column order: ID | Title | Description | Date | Time | EndTime | Location | Category | Capacity | CurrentSignups | WheelchairAccessible | CaregiverRequired | CaregiverPaymentRequired | CaregiverPaymentAmount | AgeRestriction | SkillLevel | VolunteersNeeded | CurrentVolunteers
     const rowData = [
       id,
       title,
@@ -254,11 +268,11 @@ export async function PUT(request: NextRequest) {
       wheelchairAccessible ? 'true' : 'false',
       caregiverRequired ? 'true' : 'false',
       caregiverPaymentRequired ? 'true' : 'false',
-      caregiverPaymentAmount || '',
+      caregiverPaymentAmount || 'Nil',
+      ageRestriction || 'Nil',
+      skillLevel || 'all',
       volunteersNeeded || 0,
       currentVolunteers,
-      skillLevel || 'all',
-      ageRestriction || '',
     ];
 
     await sheets.spreadsheets.values.update({

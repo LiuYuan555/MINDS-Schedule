@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'Registrations!A2:O',
+      range: 'Registrations!A2:P',
     });
 
     const rows = response.data.values || [];
@@ -91,12 +91,45 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
+    // Reject guest signups - userId must start with 'user_' (registered users)
+    if (!userId.startsWith('user_')) {
+      return NextResponse.json({ error: 'You must be logged in to register for events' }, { status: 401 });
+    }
+
     const { sheets, spreadsheetId } = await getGoogleSheetsClient();
+
+    // Get event details to check capacity
+    const eventsResponse = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'Events!A:R',
+    });
+
+    const eventRows = eventsResponse.data.values || [];
+    const eventRow = eventRows.find((row) => row[0] === eventId);
+
+    if (!eventRow) {
+      return NextResponse.json({ error: 'Event not found' }, { status: 404 });
+    }
+
+    // Check capacity based on registration type
+    if (registrationType === 'participant') {
+      const capacity = eventRow[8] ? parseInt(eventRow[8], 10) : null;
+      const currentSignups = eventRow[9] ? parseInt(eventRow[9], 10) : 0;
+      if (capacity !== null && currentSignups >= capacity) {
+        return NextResponse.json({ error: 'Event is full' }, { status: 400 });
+      }
+    } else if (registrationType === 'volunteer') {
+      const volunteersNeeded = eventRow[16] ? parseInt(eventRow[16], 10) : null;
+      const currentVolunteers = eventRow[17] ? parseInt(eventRow[17], 10) : 0;
+      if (volunteersNeeded !== null && currentVolunteers >= volunteersNeeded) {
+        return NextResponse.json({ error: 'No more volunteers needed' }, { status: 400 });
+      }
+    }
 
     // Check if user already registered for this event
     const existingRegs = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'Registrations!A:D',
+      range: 'Registrations!A:I',
     });
 
     const rows = existingRegs.data.values || [];
@@ -106,6 +139,133 @@ export async function POST(request: NextRequest) {
 
     if (alreadyRegistered) {
       return NextResponse.json({ error: 'Already registered for this event' }, { status: 400 });
+    }
+
+    // Get the new event's date and time info
+    const newEventDate = eventRow[3]; // Date
+    const newEventStartTime = eventRow[4]; // Start time
+    const newEventEndTime = eventRow[5] || eventRow[4]; // End time (or start time if no end time)
+
+    // Helper function to check if two time ranges overlap
+    const timesOverlap = (start1: string, end1: string, start2: string, end2: string): boolean => {
+      // Convert time strings to minutes for easier comparison
+      const toMinutes = (time: string): number => {
+        const [hours, minutes] = time.split(':').map(Number);
+        return hours * 60 + (minutes || 0);
+      };
+      const s1 = toMinutes(start1);
+      const e1 = toMinutes(end1);
+      const s2 = toMinutes(start2);
+      const e2 = toMinutes(end2);
+      // Overlap if one starts before the other ends
+      return s1 < e2 && s2 < e1;
+    };
+
+    // Check for overlapping events the user is already registered for
+    const userRegistrations = rows.filter(
+      (row) => row[3] === userId && row[8] !== 'cancelled'
+    );
+
+    for (const reg of userRegistrations) {
+      const registeredEventId = reg[1];
+      const registeredEvent = eventRows.find((e) => e[0] === registeredEventId);
+      
+      if (registeredEvent) {
+        const regEventDate = registeredEvent[3];
+        const regEventStartTime = registeredEvent[4];
+        const regEventEndTime = registeredEvent[5] || registeredEvent[4];
+        
+        // Check if same date and times overlap
+        if (regEventDate === newEventDate && 
+            timesOverlap(newEventStartTime, newEventEndTime, regEventStartTime, regEventEndTime)) {
+          return NextResponse.json({ 
+            error: `Time conflict: You are already registered for "${registeredEvent[1]}" which overlaps with this event.` 
+          }, { status: 400 });
+        }
+      }
+    }
+
+    // Check membership limits for participants
+    if (registrationType === 'participant') {
+      // Get user's membership type from Users sheet
+      const usersResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: 'Users!A:H',
+      });
+
+      const userRows = usersResponse.data.values || [];
+      const userRow = userRows.find((row) => row[0] === userId);
+
+      if (userRow) {
+        const membershipType = userRow[6] || 'adhoc'; // Column G (index 6) = MembershipType
+
+        // Define limits for each membership type
+        const membershipLimits: Record<string, number> = {
+          adhoc: 999, // No practical limit
+          once_weekly: 1,
+          twice_weekly: 2,
+          three_plus_weekly: 999, // No practical limit
+        };
+
+        const limit = membershipLimits[membershipType] ?? 999;
+
+        if (limit < 999) {
+          // Calculate the week of the EVENT being registered for (Monday to Sunday)
+          // Parse date string as local date (YYYY-MM-DD format)
+          const [year, month, day] = newEventDate.split('-').map(Number);
+          const eventDate = new Date(year, month - 1, day); // month is 0-indexed
+          
+          const eventDayOfWeek = eventDate.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+          // Calculate days since Monday for the event's week
+          const daysSinceMonday = eventDayOfWeek === 0 ? 6 : eventDayOfWeek - 1;
+          const weekStart = new Date(eventDate);
+          weekStart.setDate(eventDate.getDate() - daysSinceMonday);
+          weekStart.setHours(0, 0, 0, 0);
+          
+          const weekEnd = new Date(weekStart);
+          weekEnd.setDate(weekStart.getDate() + 6); // Sunday
+          weekEnd.setHours(23, 59, 59, 999);
+
+          // Count user's participant registrations for events in the SAME WEEK as this event
+          const fullRegsResponse = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: 'Registrations!A:P',
+          });
+
+          const fullRegs = fullRegsResponse.data.values || [];
+          
+          // Get all event dates for the user's registrations
+          const weeklyCount = fullRegs.filter((row) => {
+            if (row[3] !== userId) return false; // Not this user
+            if (row[7] !== 'participant') return false; // Not a participant registration
+            if (row[8] === 'cancelled') return false; // Cancelled
+            
+            // Find the event for this registration to get its date
+            const regEventId = row[1];
+            const regEvent = eventRows.find((e) => e[0] === regEventId);
+            if (!regEvent) return false;
+            
+            // Parse the registered event's date as local date
+            const regEventDateStr = regEvent[3];
+            const [regYear, regMonth, regDay] = regEventDateStr.split('-').map(Number);
+            const regEventDate = new Date(regYear, regMonth - 1, regDay);
+            
+            return regEventDate >= weekStart && regEventDate <= weekEnd;
+          }).length;
+
+          if (weeklyCount >= limit) {
+            const membershipLabels: Record<string, string> = {
+              once_weekly: 'Once a Week',
+              twice_weekly: 'Twice a Week',
+            };
+            const weekStartStr = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            const weekEndStr = weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            return NextResponse.json({ 
+              error: `Weekly limit reached: Your ${membershipLabels[membershipType]} membership allows ${limit} event(s) per week. You already have ${weeklyCount} event(s) registered for the week of ${weekStartStr} - ${weekEndStr}.`
+            }, { status: 400 });
+          }
+        }
+      }
     }
 
     const registrationId = `reg_${Date.now()}`;
@@ -136,6 +296,31 @@ export async function POST(request: NextRequest) {
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: [rowData] },
     });
+
+    // Update the event's participant/volunteer count in Events sheet
+    const eventRowIndex = eventRows.findIndex((row) => row[0] === eventId);
+
+    if (eventRowIndex !== -1) {
+      if (registrationType === 'participant') {
+        // Update currentSignups (column J, index 9)
+        const currentSignups = parseInt(eventRows[eventRowIndex][9] || '0', 10);
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: `Events!J${eventRowIndex + 1}`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [[currentSignups + 1]] },
+        });
+      } else if (registrationType === 'volunteer') {
+        // Update currentVolunteers (column R, index 17)
+        const currentVolunteers = parseInt(eventRows[eventRowIndex][17] || '0', 10);
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: `Events!R${eventRowIndex + 1}`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [[currentVolunteers + 1]] },
+        });
+      }
+    }
 
     return NextResponse.json({
       success: true,

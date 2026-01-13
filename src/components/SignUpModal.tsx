@@ -230,8 +230,9 @@ export default function SignUpModal({ event, onClose, onSubmit, userWeeklyRegist
                   type="tel"
                   id="phone"
                   required
+                  pattern="[0-9]*"
                   value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/[^0-9]/g, '') })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black"
                   placeholder="Enter your phone number"
                 />
@@ -309,8 +310,9 @@ export default function SignUpModal({ event, onClose, onSubmit, userWeeklyRegist
                       type="tel"
                       id="caregiverPhone"
                       required={formData.hasCaregiverAccompanying}
+                      pattern="[0-9]*"
                       value={formData.caregiverPhone}
-                      onChange={(e) => setFormData({ ...formData, caregiverPhone: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, caregiverPhone: e.target.value.replace(/[^0-9]/g, '') })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black"
                       placeholder="Caregiver's phone number"
                     />

@@ -77,6 +77,10 @@ export default function Home() {
   };
 
   const handleEventClick = (event: Event) => {
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
     setSelectedEvent(event);
   };
 
@@ -86,6 +90,9 @@ export default function Home() {
 
   const handleSignUp = async (formData: SignUpFormData) => {
     if (!selectedEvent) return;
+    if (!user) {
+      throw new Error('You must be logged in to register');
+    }
 
     const response = await fetch('/api/registrations', {
       method: 'POST',
@@ -93,7 +100,7 @@ export default function Home() {
       body: JSON.stringify({
         eventId: selectedEvent.id,
         eventTitle: selectedEvent.title,
-        userId: user?.id || `guest_${Date.now()}`,
+        userId: user.id,
         userName: formData.name,
         userEmail: formData.email,
         userPhone: formData.phone,
@@ -110,6 +117,9 @@ export default function Home() {
     if (!response.ok) {
       throw new Error('Failed to register');
     }
+
+    // Refresh events to show updated counts
+    await fetchEvents();
 
     // Update weekly registration count
     if (user) {
@@ -375,8 +385,9 @@ export default function Home() {
                 <input
                   type="tel"
                   required
+                  pattern="[0-9]*"
                   value={registerData.phone}
-                  onChange={(e) => setRegisterData({ ...registerData, phone: e.target.value })}
+                  onChange={(e) => setRegisterData({ ...registerData, phone: e.target.value.replace(/[^0-9]/g, '') })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black"
                 />
               </div>

@@ -121,6 +121,8 @@ export default function VolunteerPage() {
 
       if (response.ok) {
         setMyRegistrations([...myRegistrations, event.id]);
+        // Refresh events to show updated volunteer counts
+        await fetchEvents();
         alert('Successfully registered as a volunteer!');
       } else {
         const data = await response.json();
@@ -413,8 +415,9 @@ export default function VolunteerPage() {
                   <input
                     type="tel"
                     required
+                    pattern="[0-9]*"
                     value={registerData.phone}
-                    onChange={(e) => setRegisterData({ ...registerData, phone: e.target.value })}
+                    onChange={(e) => setRegisterData({ ...registerData, phone: e.target.value.replace(/[^0-9]/g, '') })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-black"
                   />
                 </div>
@@ -451,8 +454,9 @@ export default function VolunteerPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact Phone</label>
                   <input
                     type="tel"
+                    pattern="[0-9]*"
                     value={registerData.emergencyPhone}
-                    onChange={(e) => setRegisterData({ ...registerData, emergencyPhone: e.target.value })}
+                    onChange={(e) => setRegisterData({ ...registerData, emergencyPhone: e.target.value.replace(/[^0-9]/g, '') })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-black"
                   />
                 </div>

@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'Users!A:L',
+      range: 'Users!A:H',
     });
 
     const rows = response.data.values || [];
@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
 
+    // 8 columns: ID | Name | Email | Phone | Password | Role | MembershipType | CreatedAt
     const user = {
       id: userRow[0],
       name: userRow[1],
@@ -49,11 +50,7 @@ export async function POST(request: NextRequest) {
       phone: userRow[3],
       role: userRow[5],
       membershipType: userRow[6] || undefined,
-      skills: userRow[7] ? JSON.parse(userRow[7]) : [],
-      availability: userRow[8] ? JSON.parse(userRow[8]) : [],
-      emergencyContact: userRow[9] || undefined,
-      emergencyPhone: userRow[10] || undefined,
-      createdAt: userRow[11],
+      createdAt: userRow[7],
     };
 
     return NextResponse.json({ success: true, user });

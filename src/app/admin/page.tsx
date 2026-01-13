@@ -120,6 +120,22 @@ export default function AdminPage() {
     }
   };
 
+  // Time options for dropdowns
+  const hourOptions = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0'));
+  const minuteOptions = ['00', '10', '20', '30', '40', '50'];
+
+  const getTimeHour = (time: string) => time ? time.split(':')[0] : '';
+  const getTimeMinute = (time: string) => time ? time.split(':')[1] : '';
+
+  const handleTimeChange = (field: 'time' | 'endTime', part: 'hour' | 'minute', value: string) => {
+    const currentTime = formData[field] || '00:00';
+    const [currentHour, currentMinute] = currentTime.split(':');
+    const newTime = part === 'hour' 
+      ? `${value}:${currentMinute || '00'}`
+      : `${currentHour || '00'}:${value}`;
+    setFormData({ ...formData, [field]: newTime });
+  };
+
   const resetForm = () => {
     setFormData({
       title: '',
@@ -169,6 +185,13 @@ export default function AdminPage() {
     e.preventDefault();
     setIsSubmitting(true);
     setMessage(null);
+
+    // Validate that start time is before end time
+    if (formData.endTime && formData.time >= formData.endTime) {
+      setMessage({ type: 'error', text: 'Start time must be earlier than end time.' });
+      setIsSubmitting(false);
+      return;
+    }
 
     try {
       const isEditing = editingEvent !== null;
@@ -377,14 +400,36 @@ export default function AdminPage() {
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black" />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Start Time *</label>
-                      <input type="text" required value={formData.time} onChange={(e) => setFormData({ ...formData, time: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black" placeholder="e.g., 10:00 AM" />
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Start Time * (24hr)</label>
+                      <div className="flex gap-2">
+                        <select required value={getTimeHour(formData.time)} onChange={(e) => handleTimeChange('time', 'hour', e.target.value)}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black">
+                          <option value="">HH</option>
+                          {hourOptions.map((h) => <option key={h} value={h}>{h}</option>)}
+                        </select>
+                        <span className="flex items-center text-gray-500">:</span>
+                        <select required value={getTimeMinute(formData.time)} onChange={(e) => handleTimeChange('time', 'minute', e.target.value)}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black">
+                          <option value="">MM</option>
+                          {minuteOptions.map((m) => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                      </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
-                      <input type="text" value={formData.endTime} onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black" placeholder="e.g., 12:00 PM" />
+                      <label className="block text-sm font-medium text-gray-700 mb-1">End Time (24hr)</label>
+                      <div className="flex gap-2">
+                        <select value={getTimeHour(formData.endTime)} onChange={(e) => handleTimeChange('endTime', 'hour', e.target.value)}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black">
+                          <option value="">HH</option>
+                          {hourOptions.map((h) => <option key={h} value={h}>{h}</option>)}
+                        </select>
+                        <span className="flex items-center text-gray-500">:</span>
+                        <select value={getTimeMinute(formData.endTime)} onChange={(e) => handleTimeChange('endTime', 'minute', e.target.value)}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black">
+                          <option value="">MM</option>
+                          {minuteOptions.map((m) => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                      </div>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Location *</label>
@@ -478,8 +523,8 @@ export default function AdminPage() {
                           </div>
                           <p className="text-sm text-gray-600">{event.date} • {event.time}{event.endTime ? ` - ${event.endTime}` : ''} • {event.location}</p>
                           <div className="flex flex-wrap gap-4 mt-2 text-sm text-gray-500">
-                            {event.capacity && <span>Participants: {event.currentSignups || 0}/{event.capacity}</span>}
-                            {event.volunteersNeeded && <span>Volunteers: {event.currentVolunteers || 0}/{event.volunteersNeeded}</span>}
+                            {event.capacity !== undefined && <span>Participants: {event.currentSignups || 0}/{event.capacity}</span>}
+                            <span>Volunteers: {event.currentVolunteers || 0}/{event.volunteersNeeded || 0}</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">

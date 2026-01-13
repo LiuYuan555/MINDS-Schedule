@@ -1,15 +1,33 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Calendar from '@/components/Calendar';
 import EventList from '@/components/EventList';
 import SignUpModal, { SignUpFormData } from '@/components/SignUpModal';
-import { sampleEvents } from '@/data/events';
 import { Event, ViewMode } from '@/types';
 
 export default function Home() {
   const [viewMode, setViewMode] = useState<ViewMode>('calendar');
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch events from API on component mount
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        const response = await fetch('/api/events');
+        const data = await response.json();
+        setEvents(data.events || []);
+      } catch (error) {
+        console.error('Error fetching events:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchEvents();
+  }, []);
 
   const handleEventClick = (event: Event) => {
     setSelectedEvent(event);
@@ -85,10 +103,14 @@ export default function Home() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {viewMode === 'calendar' ? (
-          <Calendar events={sampleEvents} onEventClick={handleEventClick} />
+        {isLoading ? (
+          <div className="text-center py-12">
+            <p className="text-gray-500">Loading events...</p>
+          </div>
+        ) : viewMode === 'calendar' ? (
+          <Calendar events={events} onEventClick={handleEventClick} />
         ) : (
-          <EventList events={sampleEvents} onEventClick={handleEventClick} />
+          <EventList events={events} onEventClick={handleEventClick} />
         )}
       </main>
 

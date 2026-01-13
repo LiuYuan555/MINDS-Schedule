@@ -23,6 +23,7 @@ interface CalendarProps {
 }
 
 export default function Calendar({ events, onEventClick }: CalendarProps) {
+  // Initialize to current date
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
   const renderHeader = () => {
@@ -30,7 +31,7 @@ export default function Calendar({ events, onEventClick }: CalendarProps) {
       <div className="flex items-center justify-between mb-4">
         <button
           onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-700"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -41,7 +42,7 @@ export default function Calendar({ events, onEventClick }: CalendarProps) {
         </h2>
         <button
           onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-700"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />

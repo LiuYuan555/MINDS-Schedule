@@ -2,13 +2,15 @@
 
 import { useState } from 'react';
 import { format, parseISO } from 'date-fns';
-import { Event } from '@/types';
-import { categoryColors } from '@/data/events';
+import { Event, MEMBERSHIP_LIMITS, MEMBERSHIP_LABELS, MembershipType } from '@/types';
+import { categoryColors, skillLevelColors } from '@/data/events';
+import { useAuth } from '@/context/AuthContext';
 
 interface SignUpModalProps {
   event: Event;
   onClose: () => void;
   onSubmit: (data: SignUpFormData) => Promise<void>;
+  userWeeklyRegistrations?: number;
 }
 
 export interface SignUpFormData {
@@ -17,21 +19,44 @@ export interface SignUpFormData {
   phone: string;
   dietaryRequirements: string;
   specialNeeds: string;
+  needsWheelchairAccess: boolean;
+  hasCaregiverAccompanying: boolean;
+  caregiverName: string;
+  caregiverPhone: string;
 }
 
-export default function SignUpModal({ event, onClose, onSubmit }: SignUpModalProps) {
+export default function SignUpModal({ event, onClose, onSubmit, userWeeklyRegistrations = 0 }: SignUpModalProps) {
+  const { user } = useAuth();
   const [formData, setFormData] = useState<SignUpFormData>({
-    name: '',
-    email: '',
-    phone: '',
+    name: user?.name || '',
+    email: user?.email || '',
+    phone: user?.phone || '',
     dietaryRequirements: '',
     specialNeeds: '',
+    needsWheelchairAccess: false,
+    hasCaregiverAccompanying: event.caregiverRequired || false,
+    caregiverName: '',
+    caregiverPhone: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
+  // Check if user can register based on membership limits
+  const canRegister = () => {
+    if (!user || user.role !== 'participant') return true; // Allow non-logged in or non-participants
+    if (!user.membershipType) return true;
+    const limit = MEMBERSHIP_LIMITS[user.membershipType as MembershipType];
+    return userWeeklyRegistrations < limit;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!canRegister()) {
+      alert(`You have reached your weekly registration limit for ${MEMBERSHIP_LABELS[user?.membershipType as MembershipType]}.`);
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       await onSubmit(formData);
@@ -62,6 +87,13 @@ export default function SignUpModal({ event, onClose, onSubmit }: SignUpModalPro
             You have been registered for <strong>{event.title}</strong>. 
             We&apos;ll send a confirmation to your email.
           </p>
+          {event.caregiverPaymentRequired && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4 text-left">
+              <p className="text-yellow-800 text-sm">
+                <strong>Payment Required:</strong> Caregiver fee of ${event.caregiverPaymentAmount} is payable on arrival.
+              </p>
+            </div>
+          )}
           <button
             onClick={onClose}
             className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
@@ -102,11 +134,43 @@ export default function SignUpModal({ event, onClose, onSubmit }: SignUpModalPro
                 </div>
               </div>
               <div className="flex-grow">
-                <span className={`inline-block text-xs px-2 py-1 rounded-full border mb-2 ${categoryColors[event.category] || 'bg-gray-100 text-gray-800'}`}>
-                  {event.category}
-                </span>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  <span className={`inline-block text-xs px-2 py-1 rounded-full border ${categoryColors[event.category] || 'bg-gray-100 text-gray-800'}`}>
+                    {event.category}
+                  </span>
+                  {event.skillLevel && (
+                    <span className={`inline-block text-xs px-2 py-1 rounded-full ${skillLevelColors[event.skillLevel]}`}>
+                      {event.skillLevel === 'all' ? 'All Levels' : event.skillLevel.charAt(0).toUpperCase() + event.skillLevel.slice(1)}
+                    </span>
+                  )}
+                </div>
                 <h3 className="font-semibold text-gray-800 text-lg">{event.title}</h3>
                 <p className="text-sm text-gray-600 mt-1">{event.description}</p>
+                
+                {/* Event Info Badges */}
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {event.wheelchairAccessible && (
+                    <span className="inline-flex items-center gap-1 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                      ♿ Wheelchair Accessible
+                    </span>
+                  )}
+                  {event.caregiverRequired && (
+                    <span className="inline-flex items-center gap-1 text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full">
+                      👥 Caregiver Required
+                    </span>
+                  )}
+                  {event.caregiverPaymentRequired && (
+                    <span className="inline-flex items-center gap-1 text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">
+                      💰 Caregiver Fee: ${event.caregiverPaymentAmount}
+                    </span>
+                  )}
+                  {event.ageRestriction && (
+                    <span className="inline-flex items-center gap-1 text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
+                      🎂 Age: {event.ageRestriction}
+                    </span>
+                  )}
+                </div>
+
                 <div className="flex flex-wrap gap-4 mt-3 text-sm text-gray-500">
                   <div className="flex items-center gap-1">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -131,21 +195,47 @@ export default function SignUpModal({ event, onClose, onSubmit }: SignUpModalPro
             </div>
           </div>
 
+          {/* Membership Limit Warning */}
+          {user?.membershipType && !canRegister() && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+              <p className="text-red-800 text-sm">
+                <strong>Registration Limit Reached:</strong> Your {MEMBERSHIP_LABELS[user.membershipType as MembershipType]} plan allows {MEMBERSHIP_LIMITS[user.membershipType as MembershipType]} registration(s) per week. You have already registered for {userWeeklyRegistrations} event(s) this week.
+              </p>
+            </div>
+          )}
+
           {/* Registration Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-                Full Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                id="name"
-                required
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black"
-                placeholder="Enter your full name"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+                  Full Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="name"
+                  required
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black"
+                  placeholder="Enter your full name"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
+                  Phone Number <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="tel"
+                  id="phone"
+                  required
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black"
+                  placeholder="Enter your phone number"
+                />
+              </div>
             </div>
 
             <div>
@@ -163,19 +253,77 @@ export default function SignUpModal({ event, onClose, onSubmit }: SignUpModalPro
               />
             </div>
 
-            <div>
-              <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
-                Phone Number <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="tel"
-                id="phone"
-                required
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black"
-                placeholder="Enter your phone number"
-              />
+            {/* Accessibility Options */}
+            {event.wheelchairAccessible && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="wheelchairAccess"
+                  checked={formData.needsWheelchairAccess}
+                  onChange={(e) => setFormData({ ...formData, needsWheelchairAccess: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="wheelchairAccess" className="text-sm text-gray-700">
+                  I require wheelchair accessibility
+                </label>
+              </div>
+            )}
+
+            {/* Caregiver Section */}
+            <div className="border-t border-gray-200 pt-4">
+              <div className="flex items-center gap-2 mb-3">
+                <input
+                  type="checkbox"
+                  id="hasCaregiverAccompanying"
+                  checked={formData.hasCaregiverAccompanying}
+                  onChange={(e) => setFormData({ ...formData, hasCaregiverAccompanying: e.target.checked })}
+                  disabled={event.caregiverRequired}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="hasCaregiverAccompanying" className="text-sm text-gray-700">
+                  Caregiver will be accompanying {event.caregiverRequired && <span className="text-red-500">(Required)</span>}
+                </label>
+              </div>
+
+              {formData.hasCaregiverAccompanying && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ml-6">
+                  <div>
+                    <label htmlFor="caregiverName" className="block text-sm font-medium text-gray-700 mb-1">
+                      Caregiver Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      id="caregiverName"
+                      required={formData.hasCaregiverAccompanying}
+                      value={formData.caregiverName}
+                      onChange={(e) => setFormData({ ...formData, caregiverName: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black"
+                      placeholder="Caregiver's full name"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="caregiverPhone" className="block text-sm font-medium text-gray-700 mb-1">
+                      Caregiver Phone <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="tel"
+                      id="caregiverPhone"
+                      required={formData.hasCaregiverAccompanying}
+                      value={formData.caregiverPhone}
+                      onChange={(e) => setFormData({ ...formData, caregiverPhone: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black"
+                      placeholder="Caregiver's phone number"
+                    />
+                  </div>
+                  {event.caregiverPaymentRequired && (
+                    <div className="col-span-2 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                      <p className="text-yellow-800 text-sm">
+                        💰 Caregiver fee: <strong>${event.caregiverPaymentAmount}</strong> - payable on arrival
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div>
@@ -194,7 +342,7 @@ export default function SignUpModal({ event, onClose, onSubmit }: SignUpModalPro
 
             <div>
               <label htmlFor="specialNeeds" className="block text-sm font-medium text-gray-700 mb-1">
-                Special Needs / Accessibility Requirements
+                Special Needs / Additional Requirements
               </label>
               <textarea
                 id="specialNeeds"
@@ -216,7 +364,7 @@ export default function SignUpModal({ event, onClose, onSubmit }: SignUpModalPro
               </button>
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || !canRegister()}
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? 'Registering...' : 'Register'}

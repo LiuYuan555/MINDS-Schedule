@@ -27,7 +27,7 @@ export async function GET() {
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'Events!A2:K', // Skip header row
+      range: 'Events!A2:S', // Extended range for all new fields
     });
 
     const rows = response.data.values || [];
@@ -43,6 +43,14 @@ export async function GET() {
       category: row[7] || '',
       capacity: row[8] ? parseInt(row[8], 10) : undefined,
       currentSignups: row[9] ? parseInt(row[9], 10) : 0,
+      wheelchairAccessible: row[10] === 'true',
+      caregiverRequired: row[11] === 'true',
+      caregiverPaymentRequired: row[12] === 'true',
+      caregiverPaymentAmount: row[13] ? parseFloat(row[13]) : undefined,
+      volunteersNeeded: row[14] ? parseInt(row[14], 10) : 0,
+      currentVolunteers: row[15] ? parseInt(row[15], 10) : 0,
+      skillLevel: row[16] || 'all',
+      ageRestriction: row[17] || undefined,
     }));
 
     return NextResponse.json({ events });
@@ -58,7 +66,11 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { title, description, date, time, endTime, location, category, capacity } = body;
+    const { 
+      title, description, date, time, endTime, location, category, capacity,
+      wheelchairAccessible, caregiverRequired, caregiverPaymentRequired, caregiverPaymentAmount,
+      volunteersNeeded, skillLevel, ageRestriction
+    } = body;
 
     if (!title || !description || !date || !time || !location || !category) {
       return NextResponse.json(
@@ -83,11 +95,19 @@ export async function POST(request: NextRequest) {
       category,
       capacity || '',
       0, // currentSignups starts at 0
+      wheelchairAccessible ? 'true' : 'false',
+      caregiverRequired ? 'true' : 'false',
+      caregiverPaymentRequired ? 'true' : 'false',
+      caregiverPaymentAmount || '',
+      volunteersNeeded || 0,
+      0, // currentVolunteers starts at 0
+      skillLevel || 'all',
+      ageRestriction || '',
     ];
 
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: 'Events!A:K',
+      range: 'Events!A:S',
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [rowData],
@@ -96,7 +116,15 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      event: { id, ...body, currentSignups: 0 },
+      event: { 
+        id, 
+        ...body, 
+        currentSignups: 0, 
+        currentVolunteers: 0,
+        wheelchairAccessible: wheelchairAccessible || false,
+        caregiverRequired: caregiverRequired || false,
+        caregiverPaymentRequired: caregiverPaymentRequired || false,
+      },
     });
   } catch (error) {
     console.error('Error adding event:', error);
@@ -171,7 +199,11 @@ export async function DELETE(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, title, description, date, time, endTime, location, category, capacity } = body;
+    const { 
+      id, title, description, date, time, endTime, location, category, capacity,
+      wheelchairAccessible, caregiverRequired, caregiverPaymentRequired, caregiverPaymentAmount,
+      volunteersNeeded, skillLevel, ageRestriction
+    } = body;
 
     if (!id || !title || !description || !date || !time || !location || !category) {
       return NextResponse.json(
@@ -198,6 +230,15 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    // Get current signups and volunteers count to preserve them
+    const currentDataResponse = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `Events!J${rowIndex + 1}:P${rowIndex + 1}`,
+    });
+    const currentData = currentDataResponse.data.values?.[0] || [];
+    const currentSignups = currentData[0] || 0;
+    const currentVolunteers = currentData[6] || 0;
+
     // Update the row (rowIndex + 1 because sheets are 1-indexed)
     const rowData = [
       id,
@@ -209,11 +250,20 @@ export async function PUT(request: NextRequest) {
       location,
       category,
       capacity || '',
+      currentSignups,
+      wheelchairAccessible ? 'true' : 'false',
+      caregiverRequired ? 'true' : 'false',
+      caregiverPaymentRequired ? 'true' : 'false',
+      caregiverPaymentAmount || '',
+      volunteersNeeded || 0,
+      currentVolunteers,
+      skillLevel || 'all',
+      ageRestriction || '',
     ];
 
     await sheets.spreadsheets.values.update({
       spreadsheetId,
-      range: `Events!A${rowIndex + 1}:I${rowIndex + 1}`,
+      range: `Events!A${rowIndex + 1}:R${rowIndex + 1}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [rowData],
@@ -222,7 +272,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      event: { id, title, description, date, time, endTime, location, category, capacity },
+      event: { ...body, currentSignups, currentVolunteers },
     });
   } catch (error) {
     console.error('Error updating event:', error);

@@ -143,7 +143,7 @@ export default function SignUpModal({ event, onClose, onSubmit }: SignUpModalPro
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black"
                 placeholder="Enter your full name"
               />
             </div>
@@ -158,7 +158,7 @@ export default function SignUpModal({ event, onClose, onSubmit }: SignUpModalPro
                 required
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black"
                 placeholder="Enter your email"
               />
             </div>
@@ -173,7 +173,7 @@ export default function SignUpModal({ event, onClose, onSubmit }: SignUpModalPro
                 required
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black"
                 placeholder="Enter your phone number"
               />
             </div>
@@ -187,7 +187,7 @@ export default function SignUpModal({ event, onClose, onSubmit }: SignUpModalPro
                 id="dietary"
                 value={formData.dietaryRequirements}
                 onChange={(e) => setFormData({ ...formData, dietaryRequirements: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black"
                 placeholder="e.g., Vegetarian, Halal, No nuts"
               />
             </div>
@@ -201,7 +201,7 @@ export default function SignUpModal({ event, onClose, onSubmit }: SignUpModalPro
                 value={formData.specialNeeds}
                 onChange={(e) => setFormData({ ...formData, specialNeeds: e.target.value })}
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black"
                 placeholder="Please let us know if you have any special requirements"
               />
             </div>

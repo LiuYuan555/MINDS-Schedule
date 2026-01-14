@@ -208,7 +208,6 @@ export default function Home() {
           event={selectedEvent}
           onClose={handleCloseModal}
           onSubmit={handleSignUp}
-          userWeeklyRegistrations={userWeeklyRegistrations}
         />
       )}
     </div>

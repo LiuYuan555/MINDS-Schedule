@@ -355,10 +355,10 @@ export async function PUT(request: NextRequest) {
 
     const { sheets, spreadsheetId } = await getGoogleSheetsClient();
 
-    // Find the registration row
+    // Find the registration row and get its details
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'Registrations!A:A',
+      range: 'Registrations!A:I',
     });
 
     const rows = response.data.values || [];
@@ -368,6 +368,11 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Registration not found' }, { status: 404 });
     }
 
+    const registration = rows[rowIndex];
+    const eventId = registration[1];
+    const registrationType = registration[7];
+    const previousStatus = registration[8];
+
     // Update status (column I, index 8)
     await sheets.spreadsheets.values.update({
       spreadsheetId,
@@ -375,6 +380,67 @@ export async function PUT(request: NextRequest) {
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: [[status]] },
     });
+
+    // If status is changing to/from 'cancelled', update event counts
+    if (status === 'cancelled' && previousStatus !== 'cancelled') {
+      // Decrement the count
+      const eventsResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: 'Events!A:R',
+      });
+
+      const eventRows = eventsResponse.data.values || [];
+      const eventRowIndex = eventRows.findIndex((row) => row[0] === eventId);
+
+      if (eventRowIndex !== -1) {
+        if (registrationType === 'participant') {
+          const currentSignups = parseInt(eventRows[eventRowIndex][9] || '0', 10);
+          await sheets.spreadsheets.values.update({
+            spreadsheetId,
+            range: `Events!J${eventRowIndex + 1}`,
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [[Math.max(0, currentSignups - 1)]] },
+          });
+        } else if (registrationType === 'volunteer') {
+          const currentVolunteers = parseInt(eventRows[eventRowIndex][17] || '0', 10);
+          await sheets.spreadsheets.values.update({
+            spreadsheetId,
+            range: `Events!R${eventRowIndex + 1}`,
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [[Math.max(0, currentVolunteers - 1)]] },
+          });
+        }
+      }
+    } else if (previousStatus === 'cancelled' && status !== 'cancelled') {
+      // Re-registering (changing from cancelled to another status) - increment the count
+      const eventsResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: 'Events!A:R',
+      });
+
+      const eventRows = eventsResponse.data.values || [];
+      const eventRowIndex = eventRows.findIndex((row) => row[0] === eventId);
+
+      if (eventRowIndex !== -1) {
+        if (registrationType === 'participant') {
+          const currentSignups = parseInt(eventRows[eventRowIndex][9] || '0', 10);
+          await sheets.spreadsheets.values.update({
+            spreadsheetId,
+            range: `Events!J${eventRowIndex + 1}`,
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [[currentSignups + 1]] },
+          });
+        } else if (registrationType === 'volunteer') {
+          const currentVolunteers = parseInt(eventRows[eventRowIndex][17] || '0', 10);
+          await sheets.spreadsheets.values.update({
+            spreadsheetId,
+            range: `Events!R${eventRowIndex + 1}`,
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [[currentVolunteers + 1]] },
+          });
+        }
+      }
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

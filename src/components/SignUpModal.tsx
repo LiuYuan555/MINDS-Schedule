@@ -2,15 +2,14 @@
 
 import { useState } from 'react';
 import { format, parseISO } from 'date-fns';
-import { Event, MEMBERSHIP_LIMITS, MEMBERSHIP_LABELS, MembershipType } from '@/types';
+import { useUser } from '@clerk/nextjs';
+import { Event } from '@/types';
 import { categoryColors, skillLevelColors } from '@/data/events';
-import { useAuth } from '@/context/AuthContext';
 
 interface SignUpModalProps {
   event: Event;
   onClose: () => void;
   onSubmit: (data: SignUpFormData) => Promise<void>;
-  userWeeklyRegistrations?: number;
 }
 
 export interface SignUpFormData {
@@ -25,12 +24,12 @@ export interface SignUpFormData {
   caregiverPhone: string;
 }
 
-export default function SignUpModal({ event, onClose, onSubmit, userWeeklyRegistrations = 0 }: SignUpModalProps) {
-  const { user } = useAuth();
+export default function SignUpModal({ event, onClose, onSubmit }: SignUpModalProps) {
+  const { user } = useUser();
   const [formData, setFormData] = useState<SignUpFormData>({
-    name: user?.name || '',
-    email: user?.email || '',
-    phone: user?.phone || '',
+    name: user?.fullName || '',
+    email: user?.emailAddresses[0]?.emailAddress || '',
+    phone: '',
     dietaryRequirements: '',
     specialNeeds: '',
     needsWheelchairAccess: false,
@@ -41,21 +40,13 @@ export default function SignUpModal({ event, onClose, onSubmit, userWeeklyRegist
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  // Check if user can register based on membership limits
+  // For now, allow all registrations - membership limits can be added via Clerk metadata later
   const canRegister = () => {
-    if (!user || user.role !== 'participant') return true; // Allow non-logged in or non-participants
-    if (!user.membershipType) return true;
-    const limit = MEMBERSHIP_LIMITS[user.membershipType as MembershipType];
-    return userWeeklyRegistrations < limit;
+    return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!canRegister()) {
-      alert(`You have reached your weekly registration limit for ${MEMBERSHIP_LABELS[user?.membershipType as MembershipType]}.`);
-      return;
-    }
 
     setIsSubmitting(true);
     try {
@@ -195,15 +186,6 @@ export default function SignUpModal({ event, onClose, onSubmit, userWeeklyRegist
             </div>
           </div>
 
-          {/* Membership Limit Warning */}
-          {user?.membershipType && !canRegister() && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-              <p className="text-red-800 text-sm">
-                <strong>Registration Limit Reached:</strong> Your {MEMBERSHIP_LABELS[user.membershipType as MembershipType]} plan allows {MEMBERSHIP_LIMITS[user.membershipType as MembershipType]} registration(s) per week. You have already registered for {userWeeklyRegistrations} event(s) this week.
-              </p>
-            </div>
-          )}
-
           {/* Registration Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -215,11 +197,11 @@ export default function SignUpModal({ event, onClose, onSubmit, userWeeklyRegist
                   type="text"
                   id="name"
                   required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black"
-                  placeholder="Enter your full name"
+                  readOnly
+                  value={user?.fullName || ''}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed outline-none"
                 />
+                <p className="text-xs text-gray-500 mt-1">Name is linked to your account.</p>
               </div>
 
               <div>
@@ -230,6 +212,7 @@ export default function SignUpModal({ event, onClose, onSubmit, userWeeklyRegist
                   type="tel"
                   id="phone"
                   required
+                  inputMode="numeric"
                   pattern="[0-9]*"
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/[^0-9]/g, '') })}
@@ -247,11 +230,11 @@ export default function SignUpModal({ event, onClose, onSubmit, userWeeklyRegist
                 type="email"
                 id="email"
                 required
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black"
-                placeholder="Enter your email"
+                readOnly
+                value={user?.emailAddresses[0]?.emailAddress || ''}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed outline-none"
               />
+              <p className="text-xs text-gray-500 mt-1">Email is linked to your account.</p>
             </div>
 
             {/* Accessibility Options */}
@@ -310,6 +293,7 @@ export default function SignUpModal({ event, onClose, onSubmit, userWeeklyRegist
                       type="tel"
                       id="caregiverPhone"
                       required={formData.hasCaregiverAccompanying}
+                      inputMode="numeric"
                       pattern="[0-9]*"
                       value={formData.caregiverPhone}
                       onChange={(e) => setFormData({ ...formData, caregiverPhone: e.target.value.replace(/[^0-9]/g, '') })}
@@ -366,7 +350,7 @@ export default function SignUpModal({ event, onClose, onSubmit, userWeeklyRegist
               </button>
               <button
                 type="submit"
-                disabled={isSubmitting || !canRegister()}
+                disabled={isSubmitting}
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? 'Registering...' : 'Register'}

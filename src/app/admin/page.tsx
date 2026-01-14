@@ -566,17 +566,19 @@ export default function AdminPage() {
               <>
                 {(() => {
                   const eventRegs = getEventRegistrations(selectedEventForAttendance);
-                  const participants = eventRegs.filter((r) => r.registrationType === 'participant');
-                  const volunteers = eventRegs.filter((r) => r.registrationType === 'volunteer');
-                  const attended = eventRegs.filter((r) => r.status === 'attended').length;
+                  const activeRegs = eventRegs.filter((r) => r.status !== 'cancelled');
+                  const participants = activeRegs.filter((r) => r.registrationType === 'participant');
+                  const volunteers = activeRegs.filter((r) => r.registrationType === 'volunteer');
+                  const attended = activeRegs.filter((r) => r.status === 'attended').length;
+                  const cancelled = eventRegs.filter((r) => r.status === 'cancelled').length;
 
                   return (
                     <>
                       {/* Summary Stats */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
                         <div className="bg-blue-50 rounded-lg p-4 text-center">
-                          <p className="text-2xl font-bold text-blue-600">{eventRegs.length}</p>
-                          <p className="text-sm text-gray-600">Total Registered</p>
+                          <p className="text-2xl font-bold text-blue-600">{activeRegs.length}</p>
+                          <p className="text-sm text-gray-600">Active Registrations</p>
                         </div>
                         <div className="bg-green-50 rounded-lg p-4 text-center">
                           <p className="text-2xl font-bold text-green-600">{attended}</p>
@@ -590,6 +592,10 @@ export default function AdminPage() {
                           <p className="text-2xl font-bold text-orange-600">{volunteers.length}</p>
                           <p className="text-sm text-gray-600">Volunteers</p>
                         </div>
+                        <div className="bg-red-50 rounded-lg p-4 text-center">
+                          <p className="text-2xl font-bold text-red-600">{cancelled}</p>
+                          <p className="text-sm text-gray-600">Cancelled</p>
+                        </div>
                       </div>
 
                       {/* Registrations List */}
@@ -598,13 +604,16 @@ export default function AdminPage() {
                       ) : (
                         <div className="space-y-3">
                           {eventRegs.map((reg) => (
-                            <div key={reg.id} className="flex flex-col md:flex-row md:items-center justify-between p-4 border border-gray-200 rounded-lg gap-4">
+                            <div key={reg.id} className={`flex flex-col md:flex-row md:items-center justify-between p-4 border rounded-lg gap-4 ${reg.status === 'cancelled' ? 'border-red-200 bg-red-50' : 'border-gray-200'}`}>
                               <div>
                                 <div className="flex items-center gap-2">
-                                  <p className="font-medium text-gray-800">{reg.userName}</p>
+                                  <p className={`font-medium ${reg.status === 'cancelled' ? 'text-gray-500 line-through' : 'text-gray-800'}`}>{reg.userName}</p>
                                   <span className={`text-xs px-2 py-1 rounded ${reg.registrationType === 'volunteer' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
                                     {reg.registrationType}
                                   </span>
+                                  {reg.status === 'cancelled' && (
+                                    <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-800">Cancelled</span>
+                                  )}
                                 </div>
                                 <p className="text-sm text-gray-600">{reg.userEmail} • {reg.userPhone}</p>
                                 {reg.needsWheelchairAccess && <p className="text-xs text-blue-600 mt-1">♿ Needs wheelchair access</p>}
@@ -618,6 +627,7 @@ export default function AdminPage() {
                                   className={`px-3 py-2 border rounded-lg text-sm ${
                                     reg.status === 'attended' ? 'bg-green-100 border-green-300 text-green-800' :
                                     reg.status === 'absent' ? 'bg-red-100 border-red-300 text-red-800' :
+                                    reg.status === 'cancelled' ? 'bg-red-100 border-red-300 text-red-800' :
                                     'bg-gray-100 border-gray-300 text-gray-800'
                                   }`}
                                 >
@@ -696,7 +706,7 @@ export default function AdminPage() {
                     </p>
                     <div className="mt-1 space-y-1">
                       {dayEvents.slice(0, 3).map((event) => {
-                        const regs = getEventRegistrations(event.id);
+                        const regs = getEventRegistrations(event.id).filter(r => r.status !== 'cancelled');
                         return (
                           <div
                             key={event.id}

@@ -19,6 +19,9 @@ export interface Event {
   // Volunteer fields
   volunteersNeeded?: number;
   currentVolunteers?: number;
+  // Recurring event fields
+  recurringGroupId?: string; // Links recurring events together
+  isRecurring?: boolean;
 }
 
 export interface SignUpData {

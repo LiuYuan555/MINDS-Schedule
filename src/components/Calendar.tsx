@@ -109,6 +109,7 @@ export default function Calendar({ events, onEventClick }: CalendarProps) {
                     categoryColors[event.category] || 'bg-gray-100 text-gray-800'
                   } hover:opacity-80 transition-opacity`}
                 >
+                  {event.isRecurring && <span className="mr-1">🔄</span>}
                   {event.title}
                 </button>
               ))}

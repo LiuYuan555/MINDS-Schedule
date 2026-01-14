@@ -140,6 +140,11 @@ export default function SignUpModal({ event, onClose, onSubmit }: SignUpModalPro
                 
                 {/* Event Info Badges */}
                 <div className="flex flex-wrap gap-2 mt-3">
+                  {event.isRecurring && (
+                    <span className="inline-flex items-center gap-1 text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
+                      🔄 Recurring Event
+                    </span>
+                  )}
                   {event.wheelchairAccessible && (
                     <span className="inline-flex items-center gap-1 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
                       ♿ Wheelchair Accessible

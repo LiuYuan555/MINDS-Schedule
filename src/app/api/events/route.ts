@@ -37,7 +37,7 @@ export async function GET() {
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'Events!A2:S', // Extended range for all new fields
+      range: 'Events!A2:T', // Extended range for recurring fields
     });
 
     const rows = response.data.values || [];
@@ -61,6 +61,8 @@ export async function GET() {
       skillLevel: row[15] || 'all',
       volunteersNeeded: row[16] ? parseInt(row[16], 10) : 0,
       currentVolunteers: row[17] ? parseInt(row[17], 10) : 0,
+      recurringGroupId: row[18] || undefined,
+      isRecurring: row[19] === 'true',
     }));
 
     return NextResponse.json({ events });
@@ -72,14 +74,14 @@ export async function GET() {
   }
 }
 
-// POST /api/events - Add a new event
+// POST /api/events - Add a new event or multiple recurring events
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { 
       title, description, date, time, endTime, location, category, capacity,
       wheelchairAccessible, caregiverRequired, caregiverPaymentRequired, caregiverPaymentAmount,
-      volunteersNeeded, skillLevel, ageRestriction
+      volunteersNeeded, skillLevel, ageRestriction, isRecurring, recurringDates
     } = body;
 
     if (!title || !description || !date || !time || !location || !category) {
@@ -91,51 +93,130 @@ export async function POST(request: NextRequest) {
 
     const { sheets, spreadsheetId } = await getGoogleSheetsClient();
 
-    // Generate a unique ID
-    const id = `event_${Date.now()}`;
+    // If recurring event, create multiple events
+    if (isRecurring && recurringDates && recurringDates.length > 0) {
+      const recurringGroupId = `recurring_${Date.now()}`;
+      const events = [];
+      const rowsData = [];
 
-    const rowData = [
-      id,
-      title,
-      description,
-      date,
-      time,
-      endTime || '',
-      location,
-      category,
-      capacity || '',
-      0, // currentSignups starts at 0
-      wheelchairAccessible ? 'true' : 'false',
-      caregiverRequired ? 'true' : 'false',
-      caregiverPaymentRequired ? 'true' : 'false',
-      caregiverPaymentAmount || 'Nil',
-      ageRestriction || 'Nil',
-      skillLevel || 'all',
-      volunteersNeeded || 0,
-      0, // currentVolunteers starts at 0
-    ];
+      for (const eventDate of recurringDates) {
+        const id = `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        const event = {
+          id,
+          title,
+          description,
+          date: eventDate,
+          time,
+          endTime: endTime || '',
+          location,
+          category,
+          capacity: capacity || undefined,
+          currentSignups: 0,
+          wheelchairAccessible: wheelchairAccessible || false,
+          caregiverRequired: caregiverRequired || false,
+          caregiverPaymentRequired: caregiverPaymentRequired || false,
+          caregiverPaymentAmount: caregiverPaymentAmount || undefined,
+          ageRestriction: ageRestriction || undefined,
+          skillLevel: skillLevel || 'all',
+          volunteersNeeded: volunteersNeeded || 0,
+          currentVolunteers: 0,
+          recurringGroupId,
+          isRecurring: true,
+        };
+        
+        events.push(event);
+        
+        const rowData = [
+          id,
+          title,
+          description,
+          eventDate,
+          time,
+          endTime || '',
+          location,
+          category,
+          capacity || '',
+          0, // currentSignups
+          wheelchairAccessible ? 'true' : 'false',
+          caregiverRequired ? 'true' : 'false',
+          caregiverPaymentRequired ? 'true' : 'false',
+          caregiverPaymentAmount || 'Nil',
+          ageRestriction || 'Nil',
+          skillLevel || 'all',
+          volunteersNeeded || 0,
+          0, // currentVolunteers
+          recurringGroupId, // column S
+          'true', // isRecurring - column T
+        ];
+        
+        rowsData.push(rowData);
+      }
 
-    await sheets.spreadsheets.values.append({
-      spreadsheetId,
-      range: 'Events!A:S',
-      valueInputOption: 'USER_ENTERED',
-      requestBody: {
-        values: [rowData],
-      },
-    });
+      // Append all rows at once
+      await sheets.spreadsheets.values.append({
+        spreadsheetId,
+        range: 'Events!A:T',
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: rowsData,
+        },
+      });
 
-    return NextResponse.json({
-      success: true,
-      event: { 
-        id, 
-        ...body, 
-        currentSignups: 0, 
-        currentVolunteers: 0,
-        wheelchairAccessible: wheelchairAccessible || false,
-        caregiverRequired: caregiverRequired || false,
-        caregiverPaymentRequired: caregiverPaymentRequired || false,
-      },
-    });
+      return NextResponse.json({
+        success: true,
+        events,
+      });
+    } else {
+      // Create single event
+      const id = `event_${Date.now()}`;
+
+      const rowData = [
+        id,
+        title,
+        description,
+        date,
+        time,
+        endTime || '',
+        location,
+        category,
+        capacity || '',
+        0, // currentSignups starts at 0
+        wheelchairAccessible ? 'true' : 'false',
+        caregiverRequired ? 'true' : 'false',
+        caregiverPaymentRequired ? 'true' : 'false',
+        caregiverPaymentAmount || 'Nil',
+        ageRestriction || 'Nil',
+        skillLevel || 'all',
+        volunteersNeeded || 0,
+        0, // currentVolunteers starts at 0
+        '', // recurringGroupId
+        'false', // isRecurring
+      ];
+
+      await sheets.spreadsheets.values.append({
+        spreadsheetId,
+        range: 'Events!A:T',
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: [rowData],
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        event: { 
+          id, 
+          ...body, 
+          currentSignups: 0, 
+          currentVolunteers: 0,
+          wheelchairAccessible: wheelchairAccessible || false,
+          caregiverRequired: caregiverRequired || false,
+          caregiverPaymentRequired: caregiverPaymentRequired || false,
+          isRecurring: false,
+        },
+      });
+    }
   } catch (error) {
     console.error('Error adding event:', error);
     return NextResponse.json(
@@ -246,14 +327,16 @@ export async function PUT(request: NextRequest) {
     // Get current signups and volunteers count to preserve them
     const currentDataResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `Events!J${rowIndex + 1}:R${rowIndex + 1}`,
+      range: `Events!J${rowIndex + 1}:T${rowIndex + 1}`,
     });
     const currentData = currentDataResponse.data.values?.[0] || [];
     const currentSignups = currentData[0] || 0;
     const currentVolunteers = currentData[8] || 0;
+    const recurringGroupId = currentData[9] || '';
+    const isRecurringStr = currentData[10] || 'false';
 
     // Update the row (rowIndex + 1 because sheets are 1-indexed)
-    // Column order: ID | Title | Description | Date | Time | EndTime | Location | Category | Capacity | CurrentSignups | WheelchairAccessible | CaregiverRequired | CaregiverPaymentRequired | CaregiverPaymentAmount | AgeRestriction | SkillLevel | VolunteersNeeded | CurrentVolunteers
+    // Column order: ID | Title | Description | Date | Time | EndTime | Location | Category | Capacity | CurrentSignups | WheelchairAccessible | CaregiverRequired | CaregiverPaymentRequired | CaregiverPaymentAmount | AgeRestriction | SkillLevel | VolunteersNeeded | CurrentVolunteers | RecurringGroupId | IsRecurring
     const rowData = [
       id,
       title,
@@ -273,11 +356,13 @@ export async function PUT(request: NextRequest) {
       skillLevel || 'all',
       volunteersNeeded || 0,
       currentVolunteers,
+      recurringGroupId,
+      isRecurringStr,
     ];
 
     await sheets.spreadsheets.values.update({
       spreadsheetId,
-      range: `Events!A${rowIndex + 1}:R${rowIndex + 1}`,
+      range: `Events!A${rowIndex + 1}:T${rowIndex + 1}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [rowData],

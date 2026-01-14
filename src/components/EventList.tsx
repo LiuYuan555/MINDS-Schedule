@@ -52,9 +52,16 @@ export default function EventList({ events, onEventClick }: EventListProps) {
                   {/* Event Details */}
                   <div className="flex-grow min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <h4 className="font-semibold text-gray-800 truncate">
-                        {event.title}
-                      </h4>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-semibold text-gray-800 truncate">
+                          {event.title}
+                        </h4>
+                        {event.isRecurring && (
+                          <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded flex-shrink-0">
+                            🔄 Recurring
+                          </span>
+                        )}
+                      </div>
                       <span
                         className={`flex-shrink-0 text-xs px-2 py-1 rounded-full border ${
                           categoryColors[event.category] || 'bg-gray-100 text-gray-800'

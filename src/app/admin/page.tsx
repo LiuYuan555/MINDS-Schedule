@@ -53,6 +53,8 @@ export default function AdminPage() {
     ageRestriction: '',
     skillLevel: 'all',
     volunteersNeeded: '',
+    isRecurring: false,
+    recurringDates: [] as string[],
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -153,6 +155,8 @@ export default function AdminPage() {
       ageRestriction: '',
       skillLevel: 'all',
       volunteersNeeded: '',
+      isRecurring: false,
+      recurringDates: [],
     });
     setEditingEvent(null);
     setShowForm(false);
@@ -176,6 +180,8 @@ export default function AdminPage() {
       ageRestriction: event.ageRestriction || '',
       skillLevel: event.skillLevel || 'all',
       volunteersNeeded: event.volunteersNeeded?.toString() || '',
+      isRecurring: false,
+      recurringDates: [],
     });
     setShowForm(true);
     setActiveTab('events');
@@ -189,6 +195,13 @@ export default function AdminPage() {
     // Validate that start time is before end time
     if (formData.endTime && formData.time >= formData.endTime) {
       setMessage({ type: 'error', text: 'Start time must be earlier than end time.' });
+      setIsSubmitting(false);
+      return;
+    }
+
+    // Validate recurring dates if recurring is enabled
+    if (formData.isRecurring && formData.recurringDates.length === 0) {
+      setMessage({ type: 'error', text: 'Please select at least one date for recurring event.' });
       setIsSubmitting(false);
       return;
     }
@@ -222,8 +235,16 @@ export default function AdminPage() {
         setEvents(events.map((ev) => (ev.id === editingEvent.id ? { ...ev, ...data.event } : ev)));
         setMessage({ type: 'success', text: 'Event updated successfully!' });
       } else {
-        setEvents([...events, data.event]);
-        setMessage({ type: 'success', text: 'Event added successfully!' });
+        // Handle both single and recurring events
+        if (data.events) {
+          // Multiple recurring events created
+          setEvents([...events, ...data.events]);
+          setMessage({ type: 'success', text: `${data.events.length} recurring events created successfully!` });
+        } else {
+          // Single event created
+          setEvents([...events, data.event]);
+          setMessage({ type: 'success', text: 'Event added successfully!' });
+        }
       }
       
       resetForm();
@@ -483,7 +504,77 @@ export default function AdminPage() {
                         className="w-4 h-4 text-blue-600 rounded" />
                       <span className="text-sm text-gray-700">💰 Caregiver Payment Required</span>
                     </label>
+                    {!editingEvent && (
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={formData.isRecurring} onChange={(e) => setFormData({ ...formData, isRecurring: e.target.checked, recurringDates: e.target.checked ? [] : [] })}
+                          className="w-4 h-4 text-blue-600 rounded" />
+                        <span className="text-sm text-gray-700">🔄 Create Recurring Event</span>
+                      </label>
+                    )}
                   </div>
+
+                  {/* Recurring Dates Section */}
+                  {formData.isRecurring && !editingEvent && (
+                    <div className="border border-blue-200 bg-blue-50 rounded-lg p-4">
+                      <h3 className="text-sm font-semibold text-gray-800 mb-2">📅 Select Recurring Dates</h3>
+                      <p className="text-xs text-gray-600 mb-3">All events will share the same time, location, capacity, and other settings.</p>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Add Date:</label>
+                        <div className="flex gap-2 mb-3">
+                          <input 
+                            type="date" 
+                            id="recurring-date-input"
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black"
+                            onChange={(e) => {
+                              const date = e.target.value;
+                              if (date && !formData.recurringDates.includes(date)) {
+                                setFormData({ ...formData, recurringDates: [...formData.recurringDates, date].sort() });
+                                e.target.value = '';
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                              }
+                            }}
+                          />
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              const input = document.getElementById('recurring-date-input') as HTMLInputElement;
+                              const date = input.value;
+                              if (date && !formData.recurringDates.includes(date)) {
+                                setFormData({ ...formData, recurringDates: [...formData.recurringDates, date].sort() });
+                                input.value = '';
+                              }
+                            }}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                          >
+                            Add
+                          </button>
+                        </div>
+                        {formData.recurringDates.length > 0 && (
+                          <div>
+                            <p className="text-sm font-medium text-gray-700 mb-2">Selected Dates ({formData.recurringDates.length}):</p>
+                            <div className="flex flex-wrap gap-2">
+                              {formData.recurringDates.map((date) => (
+                                <div key={date} className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-1.5">
+                                  <span className="text-sm text-gray-700">{format(parseISO(date), 'MMM dd, yyyy')}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setFormData({ ...formData, recurringDates: formData.recurringDates.filter(d => d !== date) })}
+                                    className="text-red-600 hover:text-red-800 text-sm font-bold"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
@@ -517,6 +608,7 @@ export default function AdminPage() {
                           <div className="flex flex-wrap items-center gap-2 mb-2">
                             <h3 className="font-semibold text-gray-800">{event.title}</h3>
                             <span className={`text-xs px-2 py-1 rounded-full border ${categoryColors[event.category]}`}>{event.category}</span>
+                            {event.isRecurring && <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">🔄 Recurring</span>}
                             {event.wheelchairAccessible && <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">♿</span>}
                             {event.caregiverRequired && <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">👥 Caregiver</span>}
                             {event.caregiverPaymentRequired && <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">💰 ${event.caregiverPaymentAmount}</span>}

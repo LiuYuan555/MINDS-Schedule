@@ -9,6 +9,7 @@ export interface Event {
   category: string;
   capacity?: number;
   currentSignups?: number;
+  currentWaitlist?: number; // Number of people on waitlist
   // New fields for nuances
   wheelchairAccessible: boolean;
   caregiverRequired: boolean;
@@ -53,6 +54,9 @@ export interface User {
   phone: string;
   role: UserRole;
   membershipType?: MembershipType; // Only for participants
+  // Caregiver fields
+  isCaregiver?: boolean; // True if this user is a caregiver
+  participantName?: string; // Name of person under caregiver's care
   // Volunteer specific fields
   skills?: string[];
   availability?: string[];
@@ -71,7 +75,11 @@ export interface Registration {
   userEmail: string;
   userPhone: string;
   registrationType: 'participant' | 'volunteer';
-  status: 'registered' | 'attended' | 'absent' | 'cancelled';
+  status: 'registered' | 'waitlist' | 'attended' | 'absent' | 'cancelled' | 'rejected';
+  waitlistPosition?: number; // Position in waitlist (1 = first in line)
+  // Caregiver fields
+  isCaregiver?: boolean; // True if registrant is a caregiver
+  participantName?: string; // Name of actual participant (if different from userName)
   // Participant specific
   dietaryRequirements?: string;
   specialNeeds?: string;
@@ -82,6 +90,7 @@ export interface Registration {
   // Timestamps
   registeredAt: string;
   attendedAt?: string;
+  promotedAt?: string; // When promoted from waitlist to registered
 }
 
 export interface WeeklyRegistrationCount {

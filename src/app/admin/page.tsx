@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Event, Registration } from '@/types';
 import { categoryColors } from '@/data/events';
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay } from 'date-fns';
+import WaitlistManager from '@/components/WaitlistManager';
 
 const categories = [
   'Workshop',
@@ -31,10 +32,12 @@ export default function AdminPage() {
 
   const [events, setEvents] = useState<Event[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
+  const [removalHistory, setRemovalHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [selectedEventForAttendance, setSelectedEventForAttendance] = useState<string | null>(null);
+  const [selectedEventForWaitlist, setSelectedEventForWaitlist] = useState<Event | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
   
   const [formData, setFormData] = useState({
@@ -45,14 +48,14 @@ export default function AdminPage() {
     endTime: '',
     location: '',
     category: 'Workshop',
-    capacity: '',
+    capacity: '0',
     wheelchairAccessible: true,
     caregiverRequired: false,
     caregiverPaymentRequired: false,
     caregiverPaymentAmount: '',
     ageRestriction: '',
     skillLevel: 'all',
-    volunteersNeeded: '',
+    volunteersNeeded: '0',
     isRecurring: false,
     recurringDates: [] as string[],
   });
@@ -68,6 +71,18 @@ export default function AdminPage() {
     }
     setIsCheckingAuth(false);
   }, []);
+
+  // Fetch removal history when event is selected
+  useEffect(() => {
+    if (selectedEventForAttendance) {
+      fetchRemovalHistory(selectedEventForAttendance).catch(() => {
+        // Silently fail if RemovalHistory sheet doesn't exist yet
+        setRemovalHistory([]);
+      });
+    } else {
+      setRemovalHistory([]);
+    }
+  }, [selectedEventForAttendance]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,15 +137,126 @@ export default function AdminPage() {
     }
   };
 
+  const fetchRemovalHistory = async (eventId?: string) => {
+    try {
+      const url = eventId 
+        ? `/api/registrations/history?eventId=${eventId}`
+        : '/api/registrations/history';
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        // If RemovalHistory sheet doesn't exist, just set empty array
+        setRemovalHistory([]);
+        return;
+      }
+      
+      const data = await response.json();
+      setRemovalHistory(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Error fetching removal history:', error);
+      setRemovalHistory([]);
+    }
+  };
+
+  const handleRemoveParticipant = async (registration: Registration) => {
+    const displayName = getDisplayName(registration);
+    if (!confirm(`Remove ${displayName} from this event?\n\nThis will permanently remove them from the attendance list and log the removal in history.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `/api/registrations?registrationId=${registration.id}&removedBy=Staff&reason=Removed by staff`,
+        { method: 'DELETE' }
+      );
+
+      if (response.ok) {
+        // Remove from local state
+        setRegistrations(registrations.filter((r) => r.id !== registration.id));
+        // Refresh removal history
+        if (selectedEventForAttendance) {
+          fetchRemovalHistory(selectedEventForAttendance);
+        }
+        setMessage({ type: 'success', text: `${displayName} has been removed from the event.` });
+      } else {
+        throw new Error('Failed to remove participant');
+      }
+    } catch (error) {
+      console.error('Error removing participant:', error);
+      setMessage({ type: 'error', text: 'Failed to remove participant. Please try again.' });
+    }
+  };
+
   // Time options for dropdowns
   const hourOptions = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0'));
   const minuteOptions = ['00', '10', '20', '30', '40', '50'];
 
-  const getTimeHour = (time: string) => time ? time.split(':')[0] : '';
-  const getTimeMinute = (time: string) => time ? time.split(':')[1] : '';
+  // Helper function to get the display name (participant name if caregiver, otherwise user name)
+  const getDisplayName = (registration: Registration): string => {
+    return registration.isCaregiver && registration.participantName 
+      ? registration.participantName 
+      : registration.userName;
+  };
+
+  // Convert 12-hour format (e.g., "10:00 AM") to 24-hour format (e.g., "10:00")
+  const convertTo24Hour = (time: string) => {
+    if (!time) return '';
+    
+    // Trim whitespace
+    time = time.trim();
+    
+    // If already in 24-hour format (no AM/PM), return as is
+    if (!time.includes('AM') && !time.includes('PM')) {
+      return time;
+    }
+    
+    // Parse 12-hour format - handle with or without space
+    let timePart, meridiem;
+    if (time.includes(' ')) {
+      [timePart, meridiem] = time.split(' ');
+    } else {
+      // No space between time and AM/PM
+      if (time.includes('AM')) {
+        timePart = time.replace('AM', '');
+        meridiem = 'AM';
+      } else {
+        timePart = time.replace('PM', '');
+        meridiem = 'PM';
+      }
+    }
+    
+    const [hours, minutes] = timePart.split(':');
+    let hour = parseInt(hours);
+    
+    if (meridiem === 'PM' && hour !== 12) {
+      hour += 12;
+    } else if (meridiem === 'AM' && hour === 12) {
+      hour = 0;
+    }
+    
+    return `${hour.toString().padStart(2, '0')}:${minutes || '00'}`;
+  };
+
+  const getTimeHour = (time: string) => {
+    const time24 = convertTo24Hour(time);
+    if (!time24) return '';
+    const hour = time24.split(':')[0];
+    // Ensure hour is padded to 2 digits (e.g., "2" -> "02")
+    return hour.padStart(2, '0');
+  };
+  
+  const getTimeMinute = (time: string) => {
+    const time24 = convertTo24Hour(time);
+    if (!time24) return '';
+    const parts = time24.split(':');
+    // Round minutes to nearest 10-minute interval for dropdown
+    const minute = parts[1] ? parts[1].substring(0, 2) : '';
+    const roundedMinute = Math.floor(parseInt(minute || '0') / 10) * 10;
+    return roundedMinute.toString().padStart(2, '0');
+  };
 
   const handleTimeChange = (field: 'time' | 'endTime', part: 'hour' | 'minute', value: string) => {
-    const currentTime = formData[field] || '00:00';
+    const currentTime = convertTo24Hour(formData[field]) || '00:00';
     const [currentHour, currentMinute] = currentTime.split(':');
     const newTime = part === 'hour' 
       ? `${value}:${currentMinute || '00'}`
@@ -147,14 +273,14 @@ export default function AdminPage() {
       endTime: '',
       location: '',
       category: 'Workshop',
-      capacity: '',
+      capacity: '0',
       wheelchairAccessible: true,
       caregiverRequired: false,
       caregiverPaymentRequired: false,
       caregiverPaymentAmount: '',
       ageRestriction: '',
       skillLevel: 'all',
-      volunteersNeeded: '',
+      volunteersNeeded: '0',
       isRecurring: false,
       recurringDates: [],
     });
@@ -172,14 +298,14 @@ export default function AdminPage() {
       endTime: event.endTime || '',
       location: event.location,
       category: event.category,
-      capacity: event.capacity?.toString() || '',
+      capacity: event.capacity?.toString() || '0',
       wheelchairAccessible: event.wheelchairAccessible ?? true,
       caregiverRequired: event.caregiverRequired ?? false,
       caregiverPaymentRequired: event.caregiverPaymentRequired ?? false,
       caregiverPaymentAmount: event.caregiverPaymentAmount?.toString() || '',
       ageRestriction: event.ageRestriction || '',
       skillLevel: event.skillLevel || 'all',
-      volunteersNeeded: event.volunteersNeeded?.toString() || '',
+      volunteersNeeded: event.volunteersNeeded?.toString() || '0',
       isRecurring: false,
       recurringDates: [],
     });
@@ -213,9 +339,9 @@ export default function AdminPage() {
       
       const payload = {
         ...formData,
-        capacity: formData.capacity ? parseInt(formData.capacity, 10) : undefined,
+        capacity: formData.capacity !== '' ? parseInt(formData.capacity, 10) : 0,
         caregiverPaymentAmount: formData.caregiverPaymentAmount ? parseInt(formData.caregiverPaymentAmount, 10) : undefined,
-        volunteersNeeded: formData.volunteersNeeded ? parseInt(formData.volunteersNeeded, 10) : undefined,
+        volunteersNeeded: formData.volunteersNeeded !== '' ? parseInt(formData.volunteersNeeded, 10) : 0,
         ...(isEditing && { id: editingEvent.id }),
       };
 
@@ -389,14 +515,16 @@ export default function AdminPage() {
         {/* Events Tab */}
         {activeTab === 'events' && (
           <>
-            <div className="mb-6">
-              <button
-                onClick={() => showForm ? resetForm() : setShowForm(true)}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-              >
-                {showForm ? 'Cancel' : '+ Add New Event'}
-              </button>
-            </div>
+            {!showForm && (
+              <div className="mb-6">
+                <button
+                  onClick={() => setShowForm(true)}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                >
+                  + Add New Event
+                </button>
+              </div>
+            )}
 
             {showForm && (
               <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
@@ -459,12 +587,12 @@ export default function AdminPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Capacity</label>
-                      <input type="number" value={formData.capacity} onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
+                      <input type="number" min="0" value={formData.capacity} onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Volunteers Needed</label>
-                      <input type="number" value={formData.volunteersNeeded} onChange={(e) => setFormData({ ...formData, volunteersNeeded: e.target.value })}
+                      <input type="number" min="0" value={formData.volunteersNeeded} onChange={(e) => setFormData({ ...formData, volunteersNeeded: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black" />
                     </div>
                     <div>
@@ -615,11 +743,14 @@ export default function AdminPage() {
                           </div>
                           <p className="text-sm text-gray-600">{event.date} • {event.time}{event.endTime ? ` - ${event.endTime}` : ''} • {event.location}</p>
                           <div className="flex flex-wrap gap-4 mt-2 text-sm text-gray-500">
-                            {event.capacity !== undefined && <span>Participants: {event.currentSignups || 0}/{event.capacity}</span>}
+                            <span>Participants: {event.currentSignups || 0}/{event.capacity ?? 0}</span>
                             <span>Volunteers: {event.currentVolunteers || 0}/{event.volunteersNeeded || 0}</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
+                          <button onClick={() => setSelectedEventForWaitlist(event)} className="text-purple-600 hover:text-purple-800 text-sm font-medium">
+                            Manage Waitlist
+                          </button>
                           <button onClick={() => handleEdit(event)} className="text-blue-600 hover:text-blue-800 text-sm font-medium">Edit</button>
                           <button onClick={() => handleDelete(event.id)} className="text-red-600 hover:text-red-800 text-sm font-medium">Delete</button>
                         </div>
@@ -699,7 +830,12 @@ export default function AdminPage() {
                             <div key={reg.id} className={`flex flex-col md:flex-row md:items-center justify-between p-4 border rounded-lg gap-4 ${reg.status === 'cancelled' ? 'border-red-200 bg-red-50' : 'border-gray-200'}`}>
                               <div>
                                 <div className="flex items-center gap-2">
-                                  <p className={`font-medium ${reg.status === 'cancelled' ? 'text-gray-500 line-through' : 'text-gray-800'}`}>{reg.userName}</p>
+                                  <p className={`font-medium ${reg.status === 'cancelled' ? 'text-gray-500 line-through' : 'text-gray-800'}`}>{getDisplayName(reg)}</p>
+                                  {reg.isCaregiver && (
+                                    <span className="text-xs px-2 py-1 rounded bg-indigo-100 text-indigo-800" title={`Caregiver: ${reg.userName}`}>
+                                      👤 Caregiver
+                                    </span>
+                                  )}
                                   <span className={`text-xs px-2 py-1 rounded ${reg.registrationType === 'volunteer' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
                                     {reg.registrationType}
                                   </span>
@@ -708,6 +844,9 @@ export default function AdminPage() {
                                   )}
                                 </div>
                                 <p className="text-sm text-gray-600">{reg.userEmail} • {reg.userPhone}</p>
+                                {reg.isCaregiver && (
+                                  <p className="text-xs text-indigo-600 mt-1">👥 Caregiver: {reg.userName}</p>
+                                )}
                                 {reg.needsWheelchairAccess && <p className="text-xs text-blue-600 mt-1">♿ Needs wheelchair access</p>}
                                 {reg.hasCaregiverAccompanying && <p className="text-xs text-orange-600 mt-1">👥 Caregiver: {reg.caregiverName}</p>}
                                 {reg.dietaryRequirements && <p className="text-xs text-gray-500 mt-1">🍽️ {reg.dietaryRequirements}</p>}
@@ -716,6 +855,7 @@ export default function AdminPage() {
                                 <select
                                   value={reg.status}
                                   onChange={(e) => handleAttendanceUpdate(reg.id, e.target.value)}
+                                  disabled={reg.status === 'cancelled'}
                                   className={`px-3 py-2 border rounded-lg text-sm ${
                                     reg.status === 'attended' ? 'bg-green-100 border-green-300 text-green-800' :
                                     reg.status === 'absent' ? 'bg-red-100 border-red-300 text-red-800' :
@@ -728,6 +868,14 @@ export default function AdminPage() {
                                   <option value="absent">Absent</option>
                                   <option value="cancelled">Cancelled</option>
                                 </select>
+                                {reg.status !== 'cancelled' && (
+                                  <button
+                                    onClick={() => handleRemoveParticipant(reg)}
+                                    className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
+                                  >
+                                    Remove
+                                  </button>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -736,6 +884,60 @@ export default function AdminPage() {
                     </>
                   );
                 })()}
+
+                {/* Removal History Section */}
+                {removalHistory.length > 0 && (
+                  <div className="mt-8 pt-6 border-t border-gray-200">
+                    <h3 className="text-lg font-semibold text-gray-700 mb-4">
+                      Removal History
+                    </h3>
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <div className="space-y-3">
+                        {removalHistory.map((removal: any, index: number) => {
+                          const displayName = removal.isCaregiver && removal.participantName 
+                            ? removal.participantName 
+                            : removal.userName;
+                          
+                          return (
+                            <div key={index} className="flex items-start justify-between bg-white p-4 rounded-lg border border-gray-200">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-gray-900">{displayName}</span>
+                                  {removal.isCaregiver && (
+                                    <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">
+                                      👤 Caregiver
+                                    </span>
+                                  )}
+                                </div>
+                                {removal.isCaregiver && removal.participantName && (
+                                  <p className="text-sm text-gray-600 mt-1">
+                                    👥 Caregiver: {removal.userName}
+                                  </p>
+                                )}
+                                <p className="text-sm text-gray-600 mt-1">
+                                  {removal.userEmail} • {removal.userPhone}
+                                </p>
+                                {removal.reason && (
+                                  <p className="text-sm text-gray-600 mt-1">
+                                    <span className="font-medium">Reason:</span> {removal.reason}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="text-right ml-4">
+                                <p className="text-sm text-gray-600">
+                                  Removed by: <span className="font-medium">{removal.removedBy}</span>
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {new Date(removal.removedAt).toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -822,6 +1024,15 @@ export default function AdminPage() {
           </div>
         )}
       </main>
+
+      {/* Waitlist Manager Modal */}
+      {selectedEventForWaitlist && (
+        <WaitlistManager
+          event={selectedEventForWaitlist}
+          onClose={() => setSelectedEventForWaitlist(null)}
+          onRefresh={fetchEvents}
+        />
+      )}
     </div>
   );
 }

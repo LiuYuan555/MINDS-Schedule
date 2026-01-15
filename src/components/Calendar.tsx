@@ -20,9 +20,11 @@ import { categoryColors } from '@/data/events';
 interface CalendarProps {
   events: Event[];
   onEventClick: (event: Event) => void;
+  multiSelectMode?: boolean;
+  selectedEvents?: Event[];
 }
 
-export default function Calendar({ events, onEventClick }: CalendarProps) {
+export default function Calendar({ events, onEventClick, multiSelectMode = false, selectedEvents = [] }: CalendarProps) {
   // Initialize to current date
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
@@ -101,18 +103,28 @@ export default function Calendar({ events, onEventClick }: CalendarProps) {
               {format(day, 'd')}
             </span>
             <div className="mt-1 space-y-1">
-              {dayEvents.slice(0, 2).map((event) => (
-                <button
-                  key={event.id}
-                  onClick={() => onEventClick(event)}
-                  className={`w-full text-left text-xs p-1 rounded truncate border ${
-                    categoryColors[event.category] || 'bg-gray-100 text-gray-800'
-                  } hover:opacity-80 transition-opacity`}
-                >
-                  {event.isRecurring && <span className="mr-1">🔄</span>}
-                  {event.title}
-                </button>
-              ))}
+              {dayEvents.slice(0, 2).map((event) => {
+                const isSelected = selectedEvents.some(e => e.id === event.id);
+                return (
+                  <button
+                    key={event.id}
+                    onClick={() => onEventClick(event)}
+                    className={`w-full text-left text-xs p-1 rounded truncate border transition-all ${
+                      categoryColors[event.category] || 'bg-gray-100 text-gray-800'
+                    } ${
+                      multiSelectMode
+                        ? isSelected
+                          ? 'ring-2 ring-blue-500 shadow-md opacity-100'
+                          : 'opacity-60 hover:opacity-80'
+                        : 'hover:opacity-80'
+                    }`}
+                  >
+                    {multiSelectMode && isSelected && <span className="mr-1">✓</span>}
+                    {event.isRecurring && <span className="mr-1">🔄</span>}
+                    {event.title}
+                  </button>
+                );
+              })}
               {dayEvents.length > 2 && (
                 <div className="text-xs text-gray-500 pl-1">
                   +{dayEvents.length - 2} more

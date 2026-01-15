@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'Registrations!A2:P',
+      range: 'Registrations!A2:T',
     });
 
     const rows = response.data.values || [];
@@ -51,6 +51,10 @@ export async function GET(request: NextRequest) {
       caregiverName: row[13] || '',
       caregiverPhone: row[14] || '',
       registeredAt: row[15] || '',
+      waitlistPosition: row[16] || '',
+      promotedAt: row[17] || '',
+      isCaregiver: row[18] === 'true',
+      participantName: row[19] || '',
     }));
 
     if (userId) {
@@ -79,6 +83,8 @@ export async function POST(request: NextRequest) {
       userEmail,
       userPhone,
       registrationType,
+      isCaregiver,
+      participantName,
       dietaryRequirements,
       specialNeeds,
       needsWheelchairAccess,
@@ -288,11 +294,15 @@ export async function POST(request: NextRequest) {
       caregiverName || '',
       caregiverPhone || '',
       registeredAt,
+      '', // waitlistPosition (column Q)
+      '', // promotedAt (column R)
+      isCaregiver ? 'true' : 'false', // isCaregiver (column S)
+      participantName || '', // participantName (column T)
     ];
 
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: 'Registrations!A:P',
+      range: 'Registrations!A:T',
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: [rowData] },
     });
@@ -446,5 +456,124 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     console.error('Error updating registration:', error);
     return NextResponse.json({ error: 'Update failed' }, { status: 500 });
+  }
+}
+
+// DELETE /api/registrations - Remove a registration and log to removal history
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const registrationId = searchParams.get('registrationId');
+    const removedBy = searchParams.get('removedBy') || 'Staff';
+    const reason = searchParams.get('reason') || 'Removed by staff';
+
+    if (!registrationId) {
+      return NextResponse.json({ error: 'Missing registration ID' }, { status: 400 });
+    }
+
+    const { sheets, spreadsheetId } = await getGoogleSheetsClient();
+
+    // Find the registration row
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'Registrations!A:T',
+    });
+
+    const rows = response.data.values || [];
+    const rowIndex = rows.findIndex((row) => row[0] === registrationId);
+
+    if (rowIndex === -1) {
+      return NextResponse.json({ error: 'Registration not found' }, { status: 404 });
+    }
+
+    const registration = rows[rowIndex];
+    const eventId = registration[1];
+    const eventTitle = registration[2];
+    const userId = registration[3];
+    const userName = registration[4];
+    const userEmail = registration[5];
+    const userPhone = registration[6];
+    const registrationType = registration[7];
+    const isCaregiver = registration[18] === 'true';
+    const participantName = registration[19] || '';
+
+    // Log to RemovalHistory sheet
+    const removalHistoryRow = [
+      `removal_${Date.now()}`, // ID
+      registrationId, // Original Registration ID
+      eventId,
+      eventTitle,
+      userId,
+      userName,
+      userEmail,
+      userPhone,
+      registrationType,
+      isCaregiver ? 'true' : 'false',
+      participantName,
+      removedBy,
+      reason,
+      new Date().toISOString(), // Removed At
+    ];
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: 'RemovalHistory!A:N',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [removalHistoryRow] },
+    });
+
+    // Delete the registration row
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: [{
+          deleteDimension: {
+            range: {
+              sheetId: 0, // Assuming Registrations is the first sheet
+              dimension: 'ROWS',
+              startIndex: rowIndex,
+              endIndex: rowIndex + 1,
+            },
+          },
+        }],
+      },
+    });
+
+    // Update event counts
+    const eventsResponse = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'Events!A:R',
+    });
+
+    const eventRows = eventsResponse.data.values || [];
+    const eventRowIndex = eventRows.findIndex((row) => row[0] === eventId);
+
+    if (eventRowIndex !== -1) {
+      if (registrationType === 'participant') {
+        const currentSignups = parseInt(eventRows[eventRowIndex][9] || '0', 10);
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: `Events!J${eventRowIndex + 1}`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [[Math.max(0, currentSignups - 1)]] },
+        });
+      } else if (registrationType === 'volunteer') {
+        const currentVolunteers = parseInt(eventRows[eventRowIndex][17] || '0', 10);
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: `Events!R${eventRowIndex + 1}`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [[Math.max(0, currentVolunteers - 1)]] },
+        });
+      }
+    }
+
+    return NextResponse.json({ 
+      success: true, 
+      message: 'Registration removed and logged to history' 
+    });
+  } catch (error) {
+    console.error('Error deleting registration:', error);
+    return NextResponse.json({ error: 'Delete failed' }, { status: 500 });
   }
 }

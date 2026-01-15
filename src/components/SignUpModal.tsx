@@ -8,14 +8,18 @@ import { categoryColors, skillLevelColors } from '@/data/events';
 
 interface SignUpModalProps {
   event: Event;
+  events?: Event[]; // For bulk registration
   onClose: () => void;
   onSubmit: (data: SignUpFormData) => Promise<void>;
+  isBulkRegistration?: boolean;
 }
 
 export interface SignUpFormData {
   name: string;
   email: string;
   phone: string;
+  isCaregiver: boolean;
+  participantName: string;
   dietaryRequirements: string;
   specialNeeds: string;
   needsWheelchairAccess: boolean;
@@ -24,12 +28,14 @@ export interface SignUpFormData {
   caregiverPhone: string;
 }
 
-export default function SignUpModal({ event, onClose, onSubmit }: SignUpModalProps) {
+export default function SignUpModal({ event, events = [], onClose, onSubmit, isBulkRegistration = false }: SignUpModalProps) {
   const { user } = useUser();
   const [formData, setFormData] = useState<SignUpFormData>({
     name: user?.fullName || '',
     email: user?.emailAddresses[0]?.emailAddress || '',
     phone: '',
+    isCaregiver: false,
+    participantName: '',
     dietaryRequirements: '',
     specialNeeds: '',
     needsWheelchairAccess: false,
@@ -63,6 +69,9 @@ export default function SignUpModal({ event, onClose, onSubmit }: SignUpModalPro
   const spotsLeft = event.capacity && event.currentSignups 
     ? event.capacity - event.currentSignups 
     : null;
+  
+  const isEventFull = spotsLeft !== null && spotsLeft <= 0;
+  const waitlistCount = event.currentWaitlist || 0;
 
   if (submitted) {
     return (
@@ -75,10 +84,19 @@ export default function SignUpModal({ event, onClose, onSubmit }: SignUpModalPro
           </div>
           <h3 className="text-xl font-semibold text-gray-800 mb-2">Registration Successful!</h3>
           <p className="text-gray-600 mb-6">
-            You have been registered for <strong>{event.title}</strong>. 
-            We&apos;ll send a confirmation to your email.
+            {isBulkRegistration ? (
+              <>
+                You have been registered for <strong>{events.length} events</strong>.
+                We&apos;ll send confirmations to your email.
+              </>
+            ) : (
+              <>
+                You have been registered for <strong>{event.title}</strong>. 
+                We&apos;ll send a confirmation to your email.
+              </>
+            )}
           </p>
-          {event.caregiverPaymentRequired && (
+          {!isBulkRegistration && event.caregiverPaymentRequired && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4 text-left">
               <p className="text-yellow-800 text-sm">
                 <strong>Payment Required:</strong> Caregiver fee of ${event.caregiverPaymentAmount} is payable on arrival.
@@ -101,7 +119,9 @@ export default function SignUpModal({ event, onClose, onSubmit }: SignUpModalPro
       <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-gray-800">Event Registration</h2>
+          <h2 className="text-xl font-semibold text-gray-800">
+            {isBulkRegistration ? 'Bulk Event Registration' : 'Event Registration'}
+          </h2>
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -113,9 +133,32 @@ export default function SignUpModal({ event, onClose, onSubmit }: SignUpModalPro
         </div>
 
         <div className="p-6">
-          {/* Event Details */}
-          <div className="bg-gray-50 rounded-lg p-4 mb-6">
-            <div className="flex gap-4">
+          {/* Event Details or List of Events */}
+          {isBulkRegistration ? (
+            <div className="bg-gray-50 rounded-lg p-4 mb-6">
+              <h3 className="font-semibold text-gray-800 mb-3">
+                Registering for {events.length} events:
+              </h3>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {events.map((evt) => (
+                  <div key={evt.id} className="flex items-start gap-2 text-sm">
+                    <svg className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <div>
+                      <span className="font-medium text-gray-800">{evt.title}</span>
+                      <span className="text-gray-500"> - {format(parseISO(evt.date), 'MMM d, yyyy')}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500 mt-3">
+                All events will use the same registration details below.
+              </p>
+            </div>
+          ) : (
+            <div className="bg-gray-50 rounded-lg p-4 mb-6">
+              <div className="flex gap-4">
               <div className="flex-shrink-0 w-16 text-center">
                 <div className="bg-blue-600 text-white rounded-t-lg py-1 text-xs font-medium">
                   {format(parseISO(event.date), 'MMM')}
@@ -183,20 +226,97 @@ export default function SignUpModal({ event, onClose, onSubmit }: SignUpModalPro
                   </div>
                 </div>
                 {spotsLeft !== null && (
-                  <div className={`mt-3 text-sm font-medium ${spotsLeft <= 5 ? 'text-red-600' : 'text-green-600'}`}>
-                    {spotsLeft} spots remaining
+                  <div className="mt-3">
+                    {isEventFull ? (
+                      <div className="space-y-2">
+                        <div className="text-sm font-medium text-red-600">
+                          Event is full - Join waitlist
+                        </div>
+                        {waitlistCount > 0 && (
+                          <div className="text-xs text-gray-500">
+                            {waitlistCount} {waitlistCount === 1 ? 'person' : 'people'} on waitlist
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className={`text-sm font-medium ${spotsLeft <= 5 ? 'text-red-600' : 'text-green-600'}`}>
+                        {spotsLeft} {spotsLeft === 1 ? 'spot' : 'spots'} remaining
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             </div>
           </div>
+          )}
+
+          {/* Waitlist Notice */}
+          {!isBulkRegistration && isEventFull && (
+            <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4 mb-6">
+              <div className="flex items-start gap-3">
+                <svg className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div>
+                  <h4 className="font-semibold text-yellow-900 mb-1">Event is Full - Request Waitlist</h4>
+                  <p className="text-sm text-yellow-800">
+                    This event has reached capacity. By submitting this form, you'll submit a waitlist request.
+                    {waitlistCount > 0 && ` There are currently ${waitlistCount} waitlist requests.`}
+                    {' '}Staff will review requests and add selected participants to the waitlist. You'll be contacted if approved and when a spot becomes available.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Registration Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Caregiver Identification */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <input
+                  type="checkbox"
+                  id="isCaregiver"
+                  checked={formData.isCaregiver}
+                  onChange={(e) => setFormData({ 
+                    ...formData, 
+                    isCaregiver: e.target.checked, 
+                    participantName: e.target.checked ? formData.participantName : '',
+                    // Clear caregiver accompanying fields if checking "I am a caregiver"
+                    hasCaregiverAccompanying: e.target.checked ? false : formData.hasCaregiverAccompanying,
+                    caregiverName: e.target.checked ? '' : formData.caregiverName,
+                    caregiverPhone: e.target.checked ? '' : formData.caregiverPhone,
+                  })}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="isCaregiver" className="text-sm font-medium text-gray-700">
+                  I am a caregiver registering on behalf of someone under my care
+                </label>
+              </div>
+              
+              {formData.isCaregiver && (
+                <div className="mt-3">
+                  <label htmlFor="participantName" className="block text-sm font-medium text-gray-700 mb-1">
+                    Name of Person Under Your Care <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="participantName"
+                    required={formData.isCaregiver}
+                    value={formData.participantName}
+                    onChange={(e) => setFormData({ ...formData, participantName: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black"
+                    placeholder="Enter participant's name"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">This is the name that will appear in staff reports.</p>
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-                  Full Name <span className="text-red-500">*</span>
+                  {formData.isCaregiver ? 'Caregiver Name' : 'Full Name'} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -258,21 +378,22 @@ export default function SignUpModal({ event, onClose, onSubmit }: SignUpModalPro
               </div>
             )}
 
-            {/* Caregiver Section */}
-            <div className="border-t border-gray-200 pt-4">
-              <div className="flex items-center gap-2 mb-3">
-                <input
-                  type="checkbox"
-                  id="hasCaregiverAccompanying"
-                  checked={formData.hasCaregiverAccompanying}
-                  onChange={(e) => setFormData({ ...formData, hasCaregiverAccompanying: e.target.checked })}
-                  disabled={event.caregiverRequired}
-                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                />
-                <label htmlFor="hasCaregiverAccompanying" className="text-sm text-gray-700">
-                  Caregiver will be accompanying {event.caregiverRequired && <span className="text-red-500">(Required)</span>}
-                </label>
-              </div>
+            {/* Caregiver Accompanying Section - Only show if NOT registering as caregiver */}
+            {!formData.isCaregiver && (
+              <div className="border-t border-gray-200 pt-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <input
+                    type="checkbox"
+                    id="hasCaregiverAccompanying"
+                    checked={formData.hasCaregiverAccompanying}
+                    onChange={(e) => setFormData({ ...formData, hasCaregiverAccompanying: e.target.checked })}
+                    disabled={event.caregiverRequired}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                  />
+                  <label htmlFor="hasCaregiverAccompanying" className="text-sm text-gray-700">
+                    Caregiver will be accompanying {event.caregiverRequired && <span className="text-red-500">(Required)</span>}
+                  </label>
+                </div>
 
               {formData.hasCaregiverAccompanying && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ml-6">
@@ -315,7 +436,8 @@ export default function SignUpModal({ event, onClose, onSubmit }: SignUpModalPro
                   )}
                 </div>
               )}
-            </div>
+              </div>
+            )}
 
             <div>
               <label htmlFor="dietary" className="block text-sm font-medium text-gray-700 mb-1">
@@ -356,9 +478,20 @@ export default function SignUpModal({ event, onClose, onSubmit }: SignUpModalPro
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`flex-1 px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                  isEventFull && !isBulkRegistration
+                    ? 'bg-yellow-600 hover:bg-yellow-700 text-white'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                }`}
               >
-                {isSubmitting ? 'Registering...' : 'Register'}
+                {isSubmitting 
+                  ? 'Submitting...' 
+                  : isBulkRegistration 
+                    ? `Register for ${events.length} Events` 
+                    : isEventFull
+                      ? 'Request Waitlist'
+                      : 'Register'
+                }
               </button>
             </div>
           </form>

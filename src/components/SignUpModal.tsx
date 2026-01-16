@@ -6,11 +6,18 @@ import { useUser } from '@clerk/nextjs';
 import { Event } from '@/types';
 import { categoryColors, skillLevelColors } from '@/data/events';
 
+export interface BulkRegistrationResult {
+  eventId: string;
+  eventTitle: string;
+  success: boolean;
+  error?: string;
+}
+
 interface SignUpModalProps {
   event: Event;
   events?: Event[]; // For bulk registration
   onClose: () => void;
-  onSubmit: (data: SignUpFormData) => Promise<void>;
+  onSubmit: (data: SignUpFormData) => Promise<BulkRegistrationResult[] | void>;
   isBulkRegistration?: boolean;
 }
 
@@ -27,6 +34,50 @@ export interface SignUpFormData {
   caregiverName: string;
   caregiverPhone: string;
 }
+
+// Helper function to get user-friendly error display
+const getErrorDisplay = (error: string): { title: string; description: string; icon: string } => {
+  if (error.includes('Already registered')) {
+    return {
+      title: 'Already Registered',
+      description: 'You have already signed up for this event. Check "My Events" to view your registrations.',
+      icon: 'duplicate'
+    };
+  }
+  if (error.includes('Time conflict')) {
+    return {
+      title: 'Schedule Conflict',
+      description: error.replace('Time conflict: ', ''),
+      icon: 'conflict'
+    };
+  }
+  if (error.includes('Weekly limit reached')) {
+    return {
+      title: 'Weekly Limit Reached',
+      description: error.replace('Weekly limit reached: ', ''),
+      icon: 'limit'
+    };
+  }
+  if (error.includes('Event is full')) {
+    return {
+      title: 'Event Full',
+      description: 'This event has reached maximum capacity. You can join the waitlist if available.',
+      icon: 'full'
+    };
+  }
+  if (error.includes('No more volunteers needed')) {
+    return {
+      title: 'Volunteer Spots Filled',
+      description: 'All volunteer positions for this event have been filled. Thank you for your interest!',
+      icon: 'full'
+    };
+  }
+  return {
+    title: 'Registration Failed',
+    description: error || 'An unexpected error occurred. Please try again later.',
+    icon: 'generic'
+  };
+};
 
 export default function SignUpModal({ event, events = [], onClose, onSubmit, isBulkRegistration = false }: SignUpModalProps) {
   const { user } = useUser();
@@ -45,6 +96,8 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [bulkResults, setBulkResults] = useState<BulkRegistrationResult[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // For now, allow all registrations - membership limits can be added via Clerk metadata later
   const canRegister = () => {
@@ -53,14 +106,19 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage(null); // Clear any previous error
 
     setIsSubmitting(true);
     try {
-      await onSubmit(formData);
+      const result = await onSubmit(formData);
+      if (isBulkRegistration && Array.isArray(result)) {
+        setBulkResults(result);
+      }
       setSubmitted(true);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error submitting form:', error);
-      alert('There was an error submitting your registration. Please try again.');
+      const message = error instanceof Error ? error.message : 'There was an error submitting your registration. Please try again.';
+      setErrorMessage(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -74,34 +132,96 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
   const waitlistCount = event.currentWaitlist || 0;
 
   if (submitted) {
+    const successCount = bulkResults.filter(r => r.success).length;
+    const failureCount = bulkResults.filter(r => !r.success).length;
+
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-xl max-w-md w-full p-6 text-center">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <h3 className="text-xl font-semibold text-gray-800 mb-2">Registration Successful!</h3>
-          <p className="text-gray-600 mb-6">
-            {isBulkRegistration ? (
-              <>
-                You have been registered for <strong>{events.length} events</strong>.
-                We&apos;ll send confirmations to your email.
-              </>
-            ) : (
-              <>
-                You have been registered for <strong>{event.title}</strong>. 
-                We&apos;ll send a confirmation to your email.
-              </>
-            )}
-          </p>
-          {!isBulkRegistration && event.caregiverPaymentRequired && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4 text-left">
-              <p className="text-yellow-800 text-sm">
-                <strong>Payment Required:</strong> Caregiver fee of ${event.caregiverPaymentAmount} is payable on arrival.
+        <div className="bg-white rounded-xl max-w-md w-full p-6">
+          {isBulkRegistration && bulkResults.length > 0 ? (
+            <>
+              {/* Bulk Registration Results */}
+              <div className={`w-16 h-16 ${failureCount === 0 ? 'bg-green-100' : failureCount === bulkResults.length ? 'bg-red-100' : 'bg-yellow-100'} rounded-full flex items-center justify-center mx-auto mb-4`}>
+                {failureCount === 0 ? (
+                  <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : failureCount === bulkResults.length ? (
+                  <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                ) : (
+                  <svg className="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                )}
+              </div>
+              <h3 className="text-xl font-semibold text-gray-800 mb-2 text-center">
+                {failureCount === 0 
+                  ? 'All Registrations Successful!' 
+                  : failureCount === bulkResults.length 
+                    ? 'Registration Failed'
+                    : 'Partial Registration Success'}
+              </h3>
+              <p className="text-gray-600 mb-4 text-center">
+                {successCount} of {bulkResults.length} events registered successfully.
               </p>
-            </div>
+              
+              {/* Individual Event Results */}
+              <div className="max-h-64 overflow-y-auto space-y-2 mb-6">
+                {bulkResults.map((result) => (
+                  <div 
+                    key={result.eventId}
+                    className={`flex items-start gap-2 p-3 rounded-lg ${
+                      result.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'
+                    }`}
+                  >
+                    {result.success ? (
+                      <svg className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className={`font-medium text-sm ${result.success ? 'text-green-800' : 'text-red-800'}`}>
+                        {result.eventTitle}
+                      </p>
+                      {result.success ? (
+                        <p className="text-xs text-green-600">Registered successfully</p>
+                      ) : (
+                        <p className="text-xs text-red-600">{result.error || 'Registration failed'}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Single Event Success */}
+              <div className="text-center">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-semibold text-gray-800 mb-2">Registration Successful!</h3>
+                <p className="text-gray-600 mb-6">
+                  You have been registered for <strong>{event.title}</strong>. 
+                  We&apos;ll send a confirmation to your email.
+                </p>
+                {event.caregiverPaymentRequired && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4 text-left">
+                    <p className="text-yellow-800 text-sm">
+                      <strong>Payment Required:</strong> Caregiver fee of ${event.caregiverPaymentAmount} is payable on arrival.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </>
           )}
           <button
             onClick={onClose}
@@ -133,6 +253,62 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
         </div>
 
         <div className="p-6">
+          {/* Error Message Display */}
+          {errorMessage && (
+            <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 mb-6">
+              <div className="flex items-start gap-3">
+                {(() => {
+                  const errorDisplay = getErrorDisplay(errorMessage);
+                  return (
+                    <>
+                      <div className="flex-shrink-0 mt-0.5">
+                        {errorDisplay.icon === 'duplicate' && (
+                          <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        )}
+                        {errorDisplay.icon === 'conflict' && (
+                          <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        )}
+                        {errorDisplay.icon === 'limit' && (
+                          <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                        )}
+                        {errorDisplay.icon === 'full' && (
+                          <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                        )}
+                        {errorDisplay.icon === 'generic' && (
+                          <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-red-800 mb-1">{errorDisplay.title}</h4>
+                        <p className="text-sm text-red-700">{errorDisplay.description}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setErrorMessage(null)}
+                        className="flex-shrink-0 p-1 hover:bg-red-100 rounded transition-colors"
+                        aria-label="Dismiss error"
+                      >
+                        <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
           {/* Event Details or List of Events */}
           {isBulkRegistration ? (
             <div className="bg-gray-50 rounded-lg p-4 mb-6">

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useUser, SignInButton, SignUpButton } from '@clerk/nextjs';
 import Calendar from '@/components/Calendar';
 import EventList from '@/components/EventList';
-import SignUpModal, { SignUpFormData } from '@/components/SignUpModal';
+import SignUpModal, { SignUpFormData, BulkRegistrationResult } from '@/components/SignUpModal';
 import { Event, ViewMode } from '@/types';
 import { startOfWeek, endOfWeek, parseISO, isWithinInterval } from 'date-fns';
 
@@ -87,6 +87,11 @@ export default function Home() {
   };
 
   const handleCloseModal = () => {
+    // If closing the bulk modal, also clear multi-select state
+    if (selectedEvent?.id === 'bulk') {
+      setSelectedEvents([]);
+      setMultiSelectMode(false);
+    }
     setSelectedEvent(null);
   };
 
@@ -119,7 +124,8 @@ export default function Home() {
     });
 
     if (!response.ok) {
-      throw new Error('Failed to register');
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to register. Please try again.');
     }
 
     // Refresh events to show updated counts
@@ -131,55 +137,77 @@ export default function Home() {
     }
   };
 
-  const handleBulkSignUp = async (formData: SignUpFormData) => {
+  const handleBulkSignUp = async (formData: SignUpFormData): Promise<BulkRegistrationResult[]> => {
     if (!user) {
       throw new Error('You must be logged in to register');
     }
 
-    // Register for all selected events
-    const registrationPromises = selectedEvents.map(event =>
-      fetch('/api/registrations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+    // Register for all selected events sequentially to avoid race conditions
+    const results: BulkRegistrationResult[] = [];
+    let successCount = 0;
+
+    for (const event of selectedEvents) {
+      try {
+        const response = await fetch('/api/registrations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            eventId: event.id,
+            eventTitle: event.title,
+            userId: user.id,
+            userName: formData.name,
+            userEmail: formData.email,
+            userPhone: formData.phone,
+            registrationType: 'participant',
+            isCaregiver: formData.isCaregiver,
+            participantName: formData.participantName,
+            dietaryRequirements: formData.dietaryRequirements,
+            specialNeeds: formData.specialNeeds,
+            needsWheelchairAccess: formData.needsWheelchairAccess,
+            hasCaregiverAccompanying: formData.hasCaregiverAccompanying,
+            caregiverName: formData.caregiverName,
+            caregiverPhone: formData.caregiverPhone,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          results.push({
+            eventId: event.id,
+            eventTitle: event.title,
+            success: false,
+            error: errorData.error || 'Registration failed',
+          });
+        } else {
+          results.push({
+            eventId: event.id,
+            eventTitle: event.title,
+            success: true,
+          });
+          successCount++;
+        }
+      } catch (error) {
+        results.push({
           eventId: event.id,
           eventTitle: event.title,
-          userId: user.id,
-          userName: formData.name,
-          userEmail: formData.email,
-          userPhone: formData.phone,
-          registrationType: 'participant',
-          isCaregiver: formData.isCaregiver,
-          participantName: formData.participantName,
-          dietaryRequirements: formData.dietaryRequirements,
-          specialNeeds: formData.specialNeeds,
-          needsWheelchairAccess: formData.needsWheelchairAccess,
-          hasCaregiverAccompanying: formData.hasCaregiverAccompanying,
-          caregiverName: formData.caregiverName,
-          caregiverPhone: formData.caregiverPhone,
-        }),
-      })
-    );
-
-    const results = await Promise.allSettled(registrationPromises);
-    
-    // Check for any failures
-    const failures = results.filter(r => r.status === 'rejected');
-    if (failures.length > 0) {
-      throw new Error(`Failed to register for ${failures.length} event(s)`);
+          success: false,
+          error: 'Network error',
+        });
+      }
     }
 
     // Refresh events to show updated counts
     await fetchEvents();
 
     // Update weekly registration count
-    if (user) {
-      setUserWeeklyRegistrations(prev => prev + selectedEvents.length);
+    if (user && successCount > 0) {
+      setUserWeeklyRegistrations(prev => prev + successCount);
     }
 
-    // Clear selection and exit multi-select mode
-    setSelectedEvents([]);
-    setMultiSelectMode(false);
+    // Don't clear selection here - wait until modal is closed
+    // so the success screen can be displayed
+
+    return results;
   };
 
   return (

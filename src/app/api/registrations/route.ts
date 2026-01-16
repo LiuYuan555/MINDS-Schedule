@@ -274,7 +274,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const registrationId = `reg_${Date.now()}`;
+    const registrationId = `reg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     const registeredAt = new Date().toISOString();
 
     const rowData = [

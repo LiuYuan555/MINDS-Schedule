@@ -3,23 +3,9 @@
 import { useState, useEffect } from 'react';
 import { Event, Registration } from '@/types';
 import { categoryColors } from '@/data/events';
-import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay } from 'date-fns';
+import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, startOfWeek, endOfWeek, addMonths, subMonths, isToday, isSameMonth } from 'date-fns';
 import WaitlistManager from '@/components/WaitlistManager';
-
-const categories = [
-  'Workshop',
-  'Outdoor Activity',
-  'Fitness',
-  'Life Skills',
-  'Social',
-  'Education',
-  'Support Group',
-  'Sports',
-  'Festive',
-  'Employment',
-];
-
-const skillLevels = ['all', 'beginner', 'intermediate', 'advanced'];
+import EventFormModal from '@/components/EventFormModal';
 
 type TabType = 'events' | 'attendance' | 'calendar';
 
@@ -28,39 +14,21 @@ export default function AdminPage() {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
-  const [activeTab, setActiveTab] = useState<TabType>('events');
+  const [activeTab, setActiveTab] = useState<TabType>('calendar');
 
   const [events, setEvents] = useState<Event[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [removalHistory, setRemovalHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
+  const [showEventModal, setShowEventModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [selectedEventForAttendance, setSelectedEventForAttendance] = useState<string | null>(null);
   const [selectedEventForWaitlist, setSelectedEventForWaitlist] = useState<Event | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
-  
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    date: '',
-    time: '',
-    endTime: '',
-    location: '',
-    category: 'Workshop',
-    capacity: '0',
-    wheelchairAccessible: true,
-    caregiverRequired: false,
-    caregiverPaymentRequired: false,
-    caregiverPaymentAmount: '',
-    ageRestriction: '',
-    skillLevel: 'all',
-    volunteersNeeded: '0',
-    isRecurring: false,
-    recurringDates: [] as string[],
-  });
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedDateForNewEvent, setSelectedDateForNewEvent] = useState<string>('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [calendarView, setCalendarView] = useState<'month' | 'week'>('month');
+  const [hoveredEvent, setHoveredEvent] = useState<string | null>(null);
 
   useEffect(() => {
     const storedAuth = localStorage.getItem('adminAuthenticated');
@@ -76,13 +44,20 @@ export default function AdminPage() {
   useEffect(() => {
     if (selectedEventForAttendance) {
       fetchRemovalHistory(selectedEventForAttendance).catch(() => {
-        // Silently fail if RemovalHistory sheet doesn't exist yet
         setRemovalHistory([]);
       });
     } else {
       setRemovalHistory([]);
     }
   }, [selectedEventForAttendance]);
+
+  // Auto-dismiss messages after 5 seconds
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => setMessage(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -145,7 +120,6 @@ export default function AdminPage() {
       const response = await fetch(url);
       
       if (!response.ok) {
-        // If RemovalHistory sheet doesn't exist, just set empty array
         setRemovalHistory([]);
         return;
       }
@@ -158,228 +132,44 @@ export default function AdminPage() {
     }
   };
 
-  const handleRemoveParticipant = async (registration: Registration) => {
-    const displayName = getDisplayName(registration);
-    if (!confirm(`Remove ${displayName} from this event?\n\nThis will permanently remove them from the attendance list and log the removal in history.`)) {
-      return;
-    }
+  const handleEventSubmit = async (eventData: any) => {
+    const isEditing = editingEvent !== null;
+    const url = '/api/events';
+    const method = isEditing ? 'PUT' : 'POST';
 
-    try {
-      const response = await fetch(
-        `/api/registrations?registrationId=${registration.id}&removedBy=Staff&reason=Removed by staff`,
-        { method: 'DELETE' }
-      );
-
-      if (response.ok) {
-        // Remove from local state
-        setRegistrations(registrations.filter((r) => r.id !== registration.id));
-        // Refresh removal history
-        if (selectedEventForAttendance) {
-          fetchRemovalHistory(selectedEventForAttendance);
-        }
-        setMessage({ type: 'success', text: `${displayName} has been removed from the event.` });
-      } else {
-        throw new Error('Failed to remove participant');
-      }
-    } catch (error) {
-      console.error('Error removing participant:', error);
-      setMessage({ type: 'error', text: 'Failed to remove participant. Please try again.' });
-    }
-  };
-
-  // Time options for dropdowns
-  const hourOptions = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0'));
-  const minuteOptions = ['00', '10', '20', '30', '40', '50'];
-
-  // Helper function to get the display name (participant name if caregiver, otherwise user name)
-  const getDisplayName = (registration: Registration): string => {
-    return registration.isCaregiver && registration.participantName 
-      ? registration.participantName 
-      : registration.userName;
-  };
-
-  // Convert 12-hour format (e.g., "10:00 AM") to 24-hour format (e.g., "10:00")
-  const convertTo24Hour = (time: string) => {
-    if (!time) return '';
-    
-    // Trim whitespace
-    time = time.trim();
-    
-    // If already in 24-hour format (no AM/PM), return as is
-    if (!time.includes('AM') && !time.includes('PM')) {
-      return time;
-    }
-    
-    // Parse 12-hour format - handle with or without space
-    let timePart, meridiem;
-    if (time.includes(' ')) {
-      [timePart, meridiem] = time.split(' ');
-    } else {
-      // No space between time and AM/PM
-      if (time.includes('AM')) {
-        timePart = time.replace('AM', '');
-        meridiem = 'AM';
-      } else {
-        timePart = time.replace('PM', '');
-        meridiem = 'PM';
-      }
-    }
-    
-    const [hours, minutes] = timePart.split(':');
-    let hour = parseInt(hours);
-    
-    if (meridiem === 'PM' && hour !== 12) {
-      hour += 12;
-    } else if (meridiem === 'AM' && hour === 12) {
-      hour = 0;
-    }
-    
-    return `${hour.toString().padStart(2, '0')}:${minutes || '00'}`;
-  };
-
-  const getTimeHour = (time: string) => {
-    const time24 = convertTo24Hour(time);
-    if (!time24) return '';
-    const hour = time24.split(':')[0];
-    // Ensure hour is padded to 2 digits (e.g., "2" -> "02")
-    return hour.padStart(2, '0');
-  };
-  
-  const getTimeMinute = (time: string) => {
-    const time24 = convertTo24Hour(time);
-    if (!time24) return '';
-    const parts = time24.split(':');
-    // Round minutes to nearest 10-minute interval for dropdown
-    const minute = parts[1] ? parts[1].substring(0, 2) : '';
-    const roundedMinute = Math.floor(parseInt(minute || '0') / 10) * 10;
-    return roundedMinute.toString().padStart(2, '0');
-  };
-
-  const handleTimeChange = (field: 'time' | 'endTime', part: 'hour' | 'minute', value: string) => {
-    const currentTime = convertTo24Hour(formData[field]) || '00:00';
-    const [currentHour, currentMinute] = currentTime.split(':');
-    const newTime = part === 'hour' 
-      ? `${value}:${currentMinute || '00'}`
-      : `${currentHour || '00'}:${value}`;
-    setFormData({ ...formData, [field]: newTime });
-  };
-
-  const resetForm = () => {
-    setFormData({
-      title: '',
-      description: '',
-      date: '',
-      time: '',
-      endTime: '',
-      location: '',
-      category: 'Workshop',
-      capacity: '0',
-      wheelchairAccessible: true,
-      caregiverRequired: false,
-      caregiverPaymentRequired: false,
-      caregiverPaymentAmount: '',
-      ageRestriction: '',
-      skillLevel: 'all',
-      volunteersNeeded: '0',
-      isRecurring: false,
-      recurringDates: [],
+    const response = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(eventData),
     });
+
+    if (!response.ok) {
+      throw new Error(isEditing ? 'Failed to update event' : 'Failed to add event');
+    }
+
+    const data = await response.json();
+    
+    if (isEditing) {
+      setEvents(events.map((ev) => (ev.id === editingEvent.id ? { ...ev, ...data.event } : ev)));
+      setMessage({ type: 'success', text: 'Event updated successfully!' });
+    } else {
+      if (data.events) {
+        setEvents([...events, ...data.events]);
+        setMessage({ type: 'success', text: `${data.events.length} recurring events created successfully!` });
+      } else {
+        setEvents([...events, data.event]);
+        setMessage({ type: 'success', text: 'Event added successfully!' });
+      }
+    }
+    
     setEditingEvent(null);
-    setShowForm(false);
+    setShowEventModal(false);
+    setSelectedDateForNewEvent('');
   };
 
   const handleEdit = (event: Event) => {
     setEditingEvent(event);
-    setFormData({
-      title: event.title,
-      description: event.description,
-      date: event.date,
-      time: event.time,
-      endTime: event.endTime || '',
-      location: event.location,
-      category: event.category,
-      capacity: event.capacity?.toString() || '0',
-      wheelchairAccessible: event.wheelchairAccessible ?? true,
-      caregiverRequired: event.caregiverRequired ?? false,
-      caregiverPaymentRequired: event.caregiverPaymentRequired ?? false,
-      caregiverPaymentAmount: event.caregiverPaymentAmount?.toString() || '',
-      ageRestriction: event.ageRestriction || '',
-      skillLevel: event.skillLevel || 'all',
-      volunteersNeeded: event.volunteersNeeded?.toString() || '0',
-      isRecurring: false,
-      recurringDates: [],
-    });
-    setShowForm(true);
-    setActiveTab('events');
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    setMessage(null);
-
-    // Validate that start time is before end time
-    if (formData.endTime && formData.time >= formData.endTime) {
-      setMessage({ type: 'error', text: 'Start time must be earlier than end time.' });
-      setIsSubmitting(false);
-      return;
-    }
-
-    // Validate recurring dates if recurring is enabled
-    if (formData.isRecurring && formData.recurringDates.length === 0) {
-      setMessage({ type: 'error', text: 'Please select at least one date for recurring event.' });
-      setIsSubmitting(false);
-      return;
-    }
-
-    try {
-      const isEditing = editingEvent !== null;
-      const url = '/api/events';
-      const method = isEditing ? 'PUT' : 'POST';
-      
-      const payload = {
-        ...formData,
-        capacity: formData.capacity !== '' ? parseInt(formData.capacity, 10) : 0,
-        caregiverPaymentAmount: formData.caregiverPaymentAmount ? parseInt(formData.caregiverPaymentAmount, 10) : undefined,
-        volunteersNeeded: formData.volunteersNeeded !== '' ? parseInt(formData.volunteersNeeded, 10) : 0,
-        ...(isEditing && { id: editingEvent.id }),
-      };
-
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        throw new Error(isEditing ? 'Failed to update event' : 'Failed to add event');
-      }
-
-      const data = await response.json();
-      
-      if (isEditing) {
-        setEvents(events.map((ev) => (ev.id === editingEvent.id ? { ...ev, ...data.event } : ev)));
-        setMessage({ type: 'success', text: 'Event updated successfully!' });
-      } else {
-        // Handle both single and recurring events
-        if (data.events) {
-          // Multiple recurring events created
-          setEvents([...events, ...data.events]);
-          setMessage({ type: 'success', text: `${data.events.length} recurring events created successfully!` });
-        } else {
-          // Single event created
-          setEvents([...events, data.event]);
-          setMessage({ type: 'success', text: 'Event added successfully!' });
-        }
-      }
-      
-      resetForm();
-    } catch (error) {
-      console.error('Error saving event:', error);
-      setMessage({ type: 'error', text: editingEvent ? 'Failed to update event.' : 'Failed to add event.' });
-    } finally {
-      setIsSubmitting(false);
-    }
+    setShowEventModal(true);
   };
 
   const handleDelete = async (eventId: string) => {
@@ -394,6 +184,12 @@ export default function AdminPage() {
       console.error('Error deleting event:', error);
       setMessage({ type: 'error', text: 'Failed to delete event.' });
     }
+  };
+
+  const handleCreateEventOnDate = (date: Date) => {
+    setSelectedDateForNewEvent(format(date, 'yyyy-MM-dd'));
+    setEditingEvent(null);
+    setShowEventModal(true);
   };
 
   const handleAttendanceUpdate = async (registrationId: string, status: string) => {
@@ -416,14 +212,49 @@ export default function AdminPage() {
     }
   };
 
+  const handleRemoveParticipant = async (registration: Registration) => {
+    const displayName = getDisplayName(registration);
+    if (!confirm(`Remove ${displayName} from this event?\n\nThis will permanently remove them from the attendance list and log the removal in history.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `/api/registrations?registrationId=${registration.id}&removedBy=Staff&reason=Removed by staff`,
+        { method: 'DELETE' }
+      );
+
+      if (response.ok) {
+        setRegistrations(registrations.filter((r) => r.id !== registration.id));
+        if (selectedEventForAttendance) {
+          fetchRemovalHistory(selectedEventForAttendance);
+        }
+        setMessage({ type: 'success', text: `${displayName} has been removed from the event.` });
+      } else {
+        throw new Error('Failed to remove participant');
+      }
+    } catch (error) {
+      console.error('Error removing participant:', error);
+      setMessage({ type: 'error', text: 'Failed to remove participant. Please try again.' });
+    }
+  };
+
+  const getDisplayName = (registration: Registration): string => {
+    return registration.isCaregiver && registration.participantName 
+      ? registration.participantName 
+      : registration.userName;
+  };
+
   const getEventRegistrations = (eventId: string) => {
     return registrations.filter((r) => r.eventId === eventId);
   };
 
-  // Calendar view helpers
+  // Calendar calculations
   const monthStart = startOfMonth(calendarMonth);
   const monthEnd = endOfMonth(calendarMonth);
-  const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  const calendarStart = startOfWeek(monthStart);
+  const calendarEnd = endOfWeek(monthEnd);
+  const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
 
   const getEventsForDay = (day: Date) => {
     return events.filter((event) => isSameDay(parseISO(event.date), day));
@@ -432,21 +263,33 @@ export default function AdminPage() {
   if (isCheckingAuth) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-500">Loading...</p>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
       </div>
     );
   }
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-sm p-8 max-w-md w-full">
-          <div className="text-center mb-6">
-            <h1 className="text-2xl font-bold text-blue-600">MINDS Staff Portal</h1>
-            <p className="text-gray-600 text-sm mt-1">Enter password to access admin panel</p>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-bold text-gray-800">MINDS Staff Portal</h1>
+            <p className="text-gray-500 text-sm mt-2">Enter password to access admin panel</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-4">
-            {authError && <div className="bg-red-100 text-red-800 p-3 rounded-lg text-sm">{authError}</div>}
+            {authError && (
+              <div className="bg-red-50 text-red-700 p-3 rounded-lg text-sm flex items-center gap-2">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {authError}
+              </div>
+            )}
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
               <input
@@ -454,16 +297,17 @@ export default function AdminPage() {
                 id="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-gray-800 transition-shadow"
+                placeholder="Enter your password"
                 required
               />
             </div>
-            <button type="submit" className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700">
-              Login
+            <button type="submit" className="w-full bg-blue-600 text-white py-3 px-4 rounded-xl hover:bg-blue-700 transition-colors font-medium">
+              Sign In
             </button>
           </form>
           <div className="mt-6 text-center">
-            <a href="/" className="text-blue-600 hover:text-blue-800 text-sm">← Back to Calendar</a>
+            <a href="/" className="text-blue-600 hover:text-blue-800 text-sm font-medium">← Back to Calendar</a>
           </div>
         </div>
       </div>
@@ -471,296 +315,368 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-100">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-blue-600">MINDS Staff Portal</h1>
-              <p className="text-gray-600 text-sm mt-1">Event Management & Attendance Tracking</p>
-            </div>
+      <header className="bg-white shadow-sm sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4">
-              <a href="/" className="text-blue-600 hover:text-blue-800 text-sm font-medium">← Back to Calendar</a>
-              <button onClick={handleLogout} className="text-red-600 hover:text-red-800 text-sm font-medium">Logout</button>
+              <h1 className="text-xl font-bold text-gray-800">MINDS Admin</h1>
+              <div className="hidden sm:flex items-center bg-gray-100 rounded-lg p-1">
+                {(['calendar', 'events', 'attendance'] as TabType[]).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                      activeTab === tab 
+                        ? 'bg-white text-blue-600 shadow-sm' 
+                        : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                  >
+                    {tab === 'calendar' && '📅 Calendar'}
+                    {tab === 'events' && '📋 Events'}
+                    {tab === 'attendance' && '✓ Attendance'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <a href="/" className="text-gray-600 hover:text-gray-800 text-sm font-medium hidden sm:block">
+                View Public Site →
+              </a>
+              <button onClick={handleLogout} className="text-red-600 hover:text-red-800 text-sm font-medium">
+                Logout
+              </button>
             </div>
           </div>
-
-          {/* Tabs */}
-          <div className="flex gap-2 mt-4">
-            {(['events', 'attendance', 'calendar'] as TabType[]).map((tab) => (
+          
+          {/* Mobile tabs */}
+          <div className="sm:hidden pb-3 flex gap-2 overflow-x-auto">
+            {(['calendar', 'events', 'attendance'] as TabType[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  activeTab === tab ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                className={`px-3 py-1.5 text-sm font-medium rounded-lg whitespace-nowrap transition-all ${
+                  activeTab === tab 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-gray-100 text-gray-600'
                 }`}
               >
-                {tab === 'events' && '📅 Events'}
-                {tab === 'attendance' && '✓ Attendance'}
-                {tab === 'calendar' && '📆 Calendar View'}
+                {tab === 'calendar' && '📅'}
+                {tab === 'events' && '📋'}
+                {tab === 'attendance' && '✓'}
+                <span className="ml-1">{tab.charAt(0).toUpperCase() + tab.slice(1)}</span>
               </button>
             ))}
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {message && (
-          <div className={`mb-6 p-4 rounded-lg ${message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+      {/* Toast Message */}
+      {message && (
+        <div className="fixed top-20 right-4 z-50 animate-slide-in">
+          <div className={`px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 ${
+            message.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+          }`}>
+            {message.type === 'success' ? (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            )}
             {message.text}
+            <button onClick={() => setMessage(null)} className="ml-2 hover:opacity-80">×</button>
+          </div>
+        </div>
+      )}
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Calendar Tab - Google Calendar Style */}
+        {activeTab === 'calendar' && (
+          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+            {/* Calendar Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setCalendarMonth(new Date())}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Today
+                </button>
+                <div className="flex items-center">
+                  <button
+                    onClick={() => setCalendarMonth(subMonths(calendarMonth, 1))}
+                    className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  >
+                    <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => setCalendarMonth(addMonths(calendarMonth, 1))}
+                    className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  >
+                    <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+                <h2 className="text-xl font-semibold text-gray-800">
+                  {format(calendarMonth, 'MMMM yyyy')}
+                </h2>
+              </div>
+              <button
+                onClick={() => {
+                  setEditingEvent(null);
+                  setSelectedDateForNewEvent('');
+                  setShowEventModal(true);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Create Event
+              </button>
+            </div>
+
+            {/* Calendar Grid */}
+            <div className="grid grid-cols-7">
+              {/* Day Headers */}
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                <div key={day} className="px-2 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-200 bg-gray-50">
+                  {day}
+                </div>
+              ))}
+              
+              {/* Calendar Days */}
+              {calendarDays.map((day, index) => {
+                const dayEvents = getEventsForDay(day);
+                const isCurrentMonth = isSameMonth(day, calendarMonth);
+                const isTodayDate = isToday(day);
+                
+                return (
+                  <div
+                    key={index}
+                    onClick={() => handleCreateEventOnDate(day)}
+                    className={`min-h-[120px] border-b border-r border-gray-200 p-1 cursor-pointer transition-colors hover:bg-blue-50 ${
+                      !isCurrentMonth ? 'bg-gray-50' : ''
+                    }`}
+                  >
+                    <div className="flex justify-between items-start mb-1">
+                      <span className={`text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full ${
+                        isTodayDate 
+                          ? 'bg-blue-600 text-white' 
+                          : isCurrentMonth 
+                            ? 'text-gray-900' 
+                            : 'text-gray-400'
+                      }`}>
+                        {format(day, 'd')}
+                      </span>
+                      {dayEvents.length > 0 && (
+                        <span className="text-xs text-gray-400 font-medium">
+                          {dayEvents.length}
+                        </span>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      {dayEvents.slice(0, 3).map((event) => {
+                        const regs = getEventRegistrations(event.id).filter(r => r.status !== 'cancelled');
+                        const isFull = event.capacity && regs.length >= event.capacity;
+                        
+                        return (
+                          <div
+                            key={event.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEdit(event);
+                            }}
+                            onMouseEnter={() => setHoveredEvent(event.id)}
+                            onMouseLeave={() => setHoveredEvent(null)}
+                            className={`text-xs px-2 py-1 rounded truncate cursor-pointer transition-all ${
+                              categoryColors[event.category]?.replace('border-', 'border-l-2 border-l-') || 'bg-blue-100 text-blue-800'
+                            } ${hoveredEvent === event.id ? 'ring-2 ring-blue-400' : ''}`}
+                            title={`${event.title} • ${event.time} • ${regs.length}/${event.capacity || '∞'} registered`}
+                          >
+                            <span className="font-medium">{event.time.substring(0, 5)}</span>
+                            <span className="ml-1">{event.title}</span>
+                            {isFull && <span className="ml-1">🔴</span>}
+                          </div>
+                        );
+                      })}
+                      {dayEvents.length > 3 && (
+                        <div 
+                          className="text-xs text-blue-600 font-medium px-2 py-0.5 hover:bg-blue-100 rounded cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Could show a popup with all events
+                          }}
+                        >
+                          +{dayEvents.length - 3} more
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Legend */}
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+              <div className="flex flex-wrap gap-3 text-xs">
+                <span className="text-gray-500 font-medium">Categories:</span>
+                {Object.entries(categoryColors).slice(0, 6).map(([category, colors]) => (
+                  <span key={category} className={`px-2 py-1 rounded ${colors}`}>
+                    {category}
+                  </span>
+                ))}
+                <span className="text-gray-400">...</span>
+              </div>
+            </div>
           </div>
         )}
 
         {/* Events Tab */}
         {activeTab === 'events' && (
-          <>
-            {!showForm && (
-              <div className="mb-6">
-                <button
-                  onClick={() => setShowForm(true)}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                >
-                  + Add New Event
-                </button>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-800">All Events ({events.length})</h2>
+              <button
+                onClick={() => {
+                  setEditingEvent(null);
+                  setSelectedDateForNewEvent('');
+                  setShowEventModal(true);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add Event
+              </button>
+            </div>
+
+            {isLoading ? (
+              <div className="bg-white rounded-xl p-8 text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                <p className="text-gray-500 mt-2">Loading events...</p>
               </div>
-            )}
-
-            {showForm && (
-              <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-                <h2 className="text-lg font-semibold text-gray-800 mb-4">{editingEvent ? 'Edit Event' : 'Add New Event'}</h2>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
-                      <input type="text" required value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
-                      <select required value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black">
-                        {categories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
-                      <input type="date" required value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Start Time * (24hr)</label>
-                      <div className="flex gap-2">
-                        <select required value={getTimeHour(formData.time)} onChange={(e) => handleTimeChange('time', 'hour', e.target.value)}
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black">
-                          <option value="">HH</option>
-                          {hourOptions.map((h) => <option key={h} value={h}>{h}</option>)}
-                        </select>
-                        <span className="flex items-center text-gray-500">:</span>
-                        <select required value={getTimeMinute(formData.time)} onChange={(e) => handleTimeChange('time', 'minute', e.target.value)}
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black">
-                          <option value="">MM</option>
-                          {minuteOptions.map((m) => <option key={m} value={m}>{m}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">End Time (24hr)</label>
-                      <div className="flex gap-2">
-                        <select value={getTimeHour(formData.endTime)} onChange={(e) => handleTimeChange('endTime', 'hour', e.target.value)}
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black">
-                          <option value="">HH</option>
-                          {hourOptions.map((h) => <option key={h} value={h}>{h}</option>)}
-                        </select>
-                        <span className="flex items-center text-gray-500">:</span>
-                        <select value={getTimeMinute(formData.endTime)} onChange={(e) => handleTimeChange('endTime', 'minute', e.target.value)}
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black">
-                          <option value="">MM</option>
-                          {minuteOptions.map((m) => <option key={m} value={m}>{m}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Location *</label>
-                      <input type="text" required value={formData.location} onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Capacity</label>
-                      <input type="number" min="0" value={formData.capacity} onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Volunteers Needed</label>
-                      <input type="number" min="0" value={formData.volunteersNeeded} onChange={(e) => setFormData({ ...formData, volunteersNeeded: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Skill Level</label>
-                      <select value={formData.skillLevel} onChange={(e) => setFormData({ ...formData, skillLevel: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black">
-                        {skillLevels.map((level) => <option key={level} value={level}>{level === 'all' ? 'All Levels' : level.charAt(0).toUpperCase() + level.slice(1)}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Age Restriction</label>
-                      <input type="text" value={formData.ageRestriction} onChange={(e) => setFormData({ ...formData, ageRestriction: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black" placeholder="e.g., 18+" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Caregiver Fee ($)</label>
-                      <input type="number" value={formData.caregiverPaymentAmount} onChange={(e) => setFormData({ ...formData, caregiverPaymentAmount: e.target.value })}
-                        disabled={!formData.caregiverPaymentRequired}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black disabled:bg-gray-100" />
-                    </div>
-                  </div>
-
-                  {/* Checkboxes */}
-                  <div className="flex flex-wrap gap-6 pt-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={formData.wheelchairAccessible} onChange={(e) => setFormData({ ...formData, wheelchairAccessible: e.target.checked })}
-                        className="w-4 h-4 text-blue-600 rounded" />
-                      <span className="text-sm text-gray-700">♿ Wheelchair Accessible</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={formData.caregiverRequired} onChange={(e) => setFormData({ ...formData, caregiverRequired: e.target.checked })}
-                        className="w-4 h-4 text-blue-600 rounded" />
-                      <span className="text-sm text-gray-700">👥 Caregiver Required</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={formData.caregiverPaymentRequired} onChange={(e) => setFormData({ ...formData, caregiverPaymentRequired: e.target.checked })}
-                        className="w-4 h-4 text-blue-600 rounded" />
-                      <span className="text-sm text-gray-700">💰 Caregiver Payment Required</span>
-                    </label>
-                    {!editingEvent && (
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={formData.isRecurring} onChange={(e) => setFormData({ ...formData, isRecurring: e.target.checked, recurringDates: e.target.checked ? [] : [] })}
-                          className="w-4 h-4 text-blue-600 rounded" />
-                        <span className="text-sm text-gray-700">🔄 Create Recurring Event</span>
-                      </label>
-                    )}
-                  </div>
-
-                  {/* Recurring Dates Section */}
-                  {formData.isRecurring && !editingEvent && (
-                    <div className="border border-blue-200 bg-blue-50 rounded-lg p-4">
-                      <h3 className="text-sm font-semibold text-gray-800 mb-2">📅 Select Recurring Dates</h3>
-                      <p className="text-xs text-gray-600 mb-3">All events will share the same time, location, capacity, and other settings.</p>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Add Date:</label>
-                        <div className="flex gap-2 mb-3">
-                          <input 
-                            type="date" 
-                            id="recurring-date-input"
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black"
-                            onChange={(e) => {
-                              const date = e.target.value;
-                              if (date && !formData.recurringDates.includes(date)) {
-                                setFormData({ ...formData, recurringDates: [...formData.recurringDates, date].sort() });
-                                e.target.value = '';
-                              }
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                              }
-                            }}
-                          />
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              const input = document.getElementById('recurring-date-input') as HTMLInputElement;
-                              const date = input.value;
-                              if (date && !formData.recurringDates.includes(date)) {
-                                setFormData({ ...formData, recurringDates: [...formData.recurringDates, date].sort() });
-                                input.value = '';
-                              }
-                            }}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                          >
-                            Add
-                          </button>
-                        </div>
-                        {formData.recurringDates.length > 0 && (
-                          <div>
-                            <p className="text-sm font-medium text-gray-700 mb-2">Selected Dates ({formData.recurringDates.length}):</p>
-                            <div className="flex flex-wrap gap-2">
-                              {formData.recurringDates.map((date) => (
-                                <div key={date} className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-1.5">
-                                  <span className="text-sm text-gray-700">{format(parseISO(date), 'MMM dd, yyyy')}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => setFormData({ ...formData, recurringDates: formData.recurringDates.filter(d => d !== date) })}
-                                    className="text-red-600 hover:text-red-800 text-sm font-bold"
-                                  >
-                                    ×
-                                  </button>
-                                </div>
-                              ))}
+            ) : events.length === 0 ? (
+              <div className="bg-white rounded-xl p-12 text-center">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <p className="text-gray-500">No events found. Create your first event!</p>
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {events
+                  .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                  .map((event) => {
+                    const regs = getEventRegistrations(event.id).filter(r => r.status !== 'cancelled');
+                    const isPast = new Date(event.date) < new Date();
+                    
+                    return (
+                      <div 
+                        key={event.id} 
+                        className={`bg-white rounded-xl shadow-sm overflow-hidden border-l-4 ${
+                          isPast ? 'opacity-60' : ''
+                        }`}
+                        style={{ borderLeftColor: categoryColors[event.category]?.includes('blue') ? '#3b82f6' : 
+                                                  categoryColors[event.category]?.includes('green') ? '#22c55e' :
+                                                  categoryColors[event.category]?.includes('purple') ? '#a855f7' :
+                                                  categoryColors[event.category]?.includes('orange') ? '#f97316' :
+                                                  categoryColors[event.category]?.includes('pink') ? '#ec4899' :
+                                                  categoryColors[event.category]?.includes('cyan') ? '#06b6d4' :
+                                                  categoryColors[event.category]?.includes('red') ? '#ef4444' :
+                                                  categoryColors[event.category]?.includes('yellow') ? '#eab308' :
+                                                  categoryColors[event.category]?.includes('indigo') ? '#6366f1' :
+                                                  categoryColors[event.category]?.includes('teal') ? '#14b8a6' : '#6b7280' }}
+                      >
+                        <div className="p-4">
+                          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                            <div className="flex-grow">
+                              <div className="flex flex-wrap items-center gap-2 mb-2">
+                                <h3 className="font-semibold text-gray-800 text-lg">{event.title}</h3>
+                                <span className={`text-xs px-2 py-1 rounded-full border ${categoryColors[event.category]}`}>
+                                  {event.category}
+                                </span>
+                                {event.isRecurring && <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">🔄 Recurring</span>}
+                                {isPast && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">Past</span>}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
+                                <span className="flex items-center gap-1">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                  {format(parseISO(event.date), 'EEE, MMM d, yyyy')}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  {event.time}{event.endTime ? ` - ${event.endTime}` : ''}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                  </svg>
+                                  {event.location}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-2 mt-3">
+                                {event.wheelchairAccessible && (
+                                  <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full">♿ Accessible</span>
+                                )}
+                                {event.caregiverRequired && (
+                                  <span className="text-xs bg-orange-50 text-orange-700 px-2 py-1 rounded-full">👥 Caregiver Required</span>
+                                )}
+                                {event.caregiverPaymentRequired && (
+                                  <span className="text-xs bg-yellow-50 text-yellow-700 px-2 py-1 rounded-full">💰 ${event.caregiverPaymentAmount}</span>
+                                )}
+                              </div>
+                              <div className="flex flex-wrap gap-4 mt-3 text-sm">
+                                <span className={`font-medium ${regs.length >= (event.capacity || 0) && event.capacity ? 'text-red-600' : 'text-gray-700'}`}>
+                                  👥 {regs.length}/{event.capacity || '∞'} Participants
+                                </span>
+                                <span className="text-gray-700">
+                                  🙋 {event.currentVolunteers || 0}/{event.volunteersNeeded || 0} Volunteers
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setSelectedEventForWaitlist(event)}
+                                className="px-3 py-2 text-purple-600 hover:bg-purple-50 rounded-lg text-sm font-medium transition-colors"
+                              >
+                                Waitlist
+                              </button>
+                              <button
+                                onClick={() => handleEdit(event)}
+                                className="px-3 py-2 text-blue-600 hover:bg-blue-50 rounded-lg text-sm font-medium transition-colors"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDelete(event.id)}
+                                className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-colors"
+                              >
+                                Delete
+                              </button>
                             </div>
                           </div>
-                        )}
+                        </div>
                       </div>
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
-                    <textarea required value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black" />
-                  </div>
-
-                  <div className="flex justify-end gap-3">
-                    <button type="button" onClick={resetForm} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Cancel</button>
-                    <button type="submit" disabled={isSubmitting} className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50">
-                      {isSubmitting ? 'Saving...' : editingEvent ? 'Update Event' : 'Add Event'}
-                    </button>
-                  </div>
-                </form>
+                    );
+                  })}
               </div>
             )}
-
-            {/* Events List */}
-            <div className="bg-white rounded-xl shadow-sm p-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">All Events ({events.length})</h2>
-              {isLoading ? (
-                <p className="text-gray-500">Loading events...</p>
-              ) : events.length === 0 ? (
-                <p className="text-gray-500">No events found.</p>
-              ) : (
-                <div className="space-y-4">
-                  {events.map((event) => (
-                    <div key={event.id} className="p-4 border border-gray-200 rounded-lg">
-                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                        <div className="flex-grow">
-                          <div className="flex flex-wrap items-center gap-2 mb-2">
-                            <h3 className="font-semibold text-gray-800">{event.title}</h3>
-                            <span className={`text-xs px-2 py-1 rounded-full border ${categoryColors[event.category]}`}>{event.category}</span>
-                            {event.isRecurring && <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">🔄 Recurring</span>}
-                            {event.wheelchairAccessible && <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">♿</span>}
-                            {event.caregiverRequired && <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">👥 Caregiver</span>}
-                            {event.caregiverPaymentRequired && <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">💰 ${event.caregiverPaymentAmount}</span>}
-                          </div>
-                          <p className="text-sm text-gray-600">{event.date} • {event.time}{event.endTime ? ` - ${event.endTime}` : ''} • {event.location}</p>
-                          <div className="flex flex-wrap gap-4 mt-2 text-sm text-gray-500">
-                            <span>Participants: {event.currentSignups || 0}/{event.capacity ?? 0}</span>
-                            <span>Volunteers: {event.currentVolunteers || 0}/{event.volunteersNeeded || 0}</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => setSelectedEventForWaitlist(event)} className="text-purple-600 hover:text-purple-800 text-sm font-medium">
-                            Manage Waitlist
-                          </button>
-                          <button onClick={() => handleEdit(event)} className="text-blue-600 hover:text-blue-800 text-sm font-medium">Edit</button>
-                          <button onClick={() => handleDelete(event.id)} className="text-red-600 hover:text-red-800 text-sm font-medium">Delete</button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
+          </div>
         )}
 
         {/* Attendance Tab */}
@@ -774,14 +690,16 @@ export default function AdminPage() {
               <select
                 value={selectedEventForAttendance || ''}
                 onChange={(e) => setSelectedEventForAttendance(e.target.value || null)}
-                className="w-full md:w-auto px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black"
+                className="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-800"
               >
                 <option value="">-- Select an event --</option>
-                {events.map((event) => (
-                  <option key={event.id} value={event.id}>
-                    {event.title} - {event.date}
-                  </option>
-                ))}
+                {events
+                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                  .map((event) => (
+                    <option key={event.id} value={event.id}>
+                      {event.title} - {format(parseISO(event.date), 'MMM d, yyyy')}
+                    </option>
+                  ))}
               </select>
             </div>
 
@@ -799,23 +717,23 @@ export default function AdminPage() {
                     <>
                       {/* Summary Stats */}
                       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-                        <div className="bg-blue-50 rounded-lg p-4 text-center">
+                        <div className="bg-blue-50 rounded-xl p-4 text-center">
                           <p className="text-2xl font-bold text-blue-600">{activeRegs.length}</p>
-                          <p className="text-sm text-gray-600">Active Registrations</p>
+                          <p className="text-sm text-gray-600">Active</p>
                         </div>
-                        <div className="bg-green-50 rounded-lg p-4 text-center">
+                        <div className="bg-green-50 rounded-xl p-4 text-center">
                           <p className="text-2xl font-bold text-green-600">{attended}</p>
                           <p className="text-sm text-gray-600">Attended</p>
                         </div>
-                        <div className="bg-purple-50 rounded-lg p-4 text-center">
+                        <div className="bg-purple-50 rounded-xl p-4 text-center">
                           <p className="text-2xl font-bold text-purple-600">{participants.length}</p>
                           <p className="text-sm text-gray-600">Participants</p>
                         </div>
-                        <div className="bg-orange-50 rounded-lg p-4 text-center">
+                        <div className="bg-orange-50 rounded-xl p-4 text-center">
                           <p className="text-2xl font-bold text-orange-600">{volunteers.length}</p>
                           <p className="text-sm text-gray-600">Volunteers</p>
                         </div>
-                        <div className="bg-red-50 rounded-lg p-4 text-center">
+                        <div className="bg-red-50 rounded-xl p-4 text-center">
                           <p className="text-2xl font-bold text-red-600">{cancelled}</p>
                           <p className="text-sm text-gray-600">Cancelled</p>
                         </div>
@@ -823,27 +741,33 @@ export default function AdminPage() {
 
                       {/* Registrations List */}
                       {eventRegs.length === 0 ? (
-                        <p className="text-gray-500">No registrations for this event.</p>
+                        <p className="text-gray-500 text-center py-8">No registrations for this event.</p>
                       ) : (
                         <div className="space-y-3">
                           {eventRegs.map((reg) => (
-                            <div key={reg.id} className={`flex flex-col md:flex-row md:items-center justify-between p-4 border rounded-lg gap-4 ${reg.status === 'cancelled' ? 'border-red-200 bg-red-50' : 'border-gray-200'}`}>
+                            <div key={reg.id} className={`flex flex-col md:flex-row md:items-center justify-between p-4 border rounded-xl gap-4 transition-colors ${
+                              reg.status === 'cancelled' ? 'border-red-200 bg-red-50' : 'border-gray-200 hover:bg-gray-50'
+                            }`}>
                               <div>
-                                <div className="flex items-center gap-2">
-                                  <p className={`font-medium ${reg.status === 'cancelled' ? 'text-gray-500 line-through' : 'text-gray-800'}`}>{getDisplayName(reg)}</p>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className={`font-medium ${reg.status === 'cancelled' ? 'text-gray-500 line-through' : 'text-gray-800'}`}>
+                                    {getDisplayName(reg)}
+                                  </p>
                                   {reg.isCaregiver && (
-                                    <span className="text-xs px-2 py-1 rounded bg-indigo-100 text-indigo-800" title={`Caregiver: ${reg.userName}`}>
+                                    <span className="text-xs px-2 py-1 rounded-full bg-indigo-100 text-indigo-800">
                                       👤 Caregiver
                                     </span>
                                   )}
-                                  <span className={`text-xs px-2 py-1 rounded ${reg.registrationType === 'volunteer' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
+                                  <span className={`text-xs px-2 py-1 rounded-full ${
+                                    reg.registrationType === 'volunteer' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+                                  }`}>
                                     {reg.registrationType}
                                   </span>
                                   {reg.status === 'cancelled' && (
-                                    <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-800">Cancelled</span>
+                                    <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-800">Cancelled</span>
                                   )}
                                 </div>
-                                <p className="text-sm text-gray-600">{reg.userEmail} • {reg.userPhone}</p>
+                                <p className="text-sm text-gray-600 mt-1">{reg.userEmail} • {reg.userPhone}</p>
                                 {reg.isCaregiver && (
                                   <p className="text-xs text-indigo-600 mt-1">👥 Caregiver: {reg.userName}</p>
                                 )}
@@ -856,7 +780,7 @@ export default function AdminPage() {
                                   value={reg.status}
                                   onChange={(e) => handleAttendanceUpdate(reg.id, e.target.value)}
                                   disabled={reg.status === 'cancelled'}
-                                  className={`px-3 py-2 border rounded-lg text-sm ${
+                                  className={`px-3 py-2 border rounded-lg text-sm font-medium ${
                                     reg.status === 'attended' ? 'bg-green-100 border-green-300 text-green-800' :
                                     reg.status === 'absent' ? 'bg-red-100 border-red-300 text-red-800' :
                                     reg.status === 'cancelled' ? 'bg-red-100 border-red-300 text-red-800' :
@@ -888,53 +812,39 @@ export default function AdminPage() {
                 {/* Removal History Section */}
                 {removalHistory.length > 0 && (
                   <div className="mt-8 pt-6 border-t border-gray-200">
-                    <h3 className="text-lg font-semibold text-gray-700 mb-4">
-                      Removal History
-                    </h3>
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <div className="space-y-3">
-                        {removalHistory.map((removal: any, index: number) => {
-                          const displayName = removal.isCaregiver && removal.participantName 
-                            ? removal.participantName 
-                            : removal.userName;
-                          
-                          return (
-                            <div key={index} className="flex items-start justify-between bg-white p-4 rounded-lg border border-gray-200">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-medium text-gray-900">{displayName}</span>
-                                  {removal.isCaregiver && (
-                                    <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">
-                                      👤 Caregiver
-                                    </span>
-                                  )}
-                                </div>
-                                {removal.isCaregiver && removal.participantName && (
-                                  <p className="text-sm text-gray-600 mt-1">
-                                    👥 Caregiver: {removal.userName}
-                                  </p>
-                                )}
-                                <p className="text-sm text-gray-600 mt-1">
-                                  {removal.userEmail} • {removal.userPhone}
-                                </p>
-                                {removal.reason && (
-                                  <p className="text-sm text-gray-600 mt-1">
-                                    <span className="font-medium">Reason:</span> {removal.reason}
-                                  </p>
+                    <h3 className="text-lg font-semibold text-gray-700 mb-4">Removal History</h3>
+                    <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                      {removalHistory.map((removal: any, index: number) => {
+                        const displayName = removal.isCaregiver && removal.participantName 
+                          ? removal.participantName 
+                          : removal.userName;
+                        
+                        return (
+                          <div key={index} className="flex items-start justify-between bg-white p-4 rounded-lg border border-gray-200">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-gray-900">{displayName}</span>
+                                {removal.isCaregiver && (
+                                  <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">
+                                    👤 Caregiver
+                                  </span>
                                 )}
                               </div>
-                              <div className="text-right ml-4">
-                                <p className="text-sm text-gray-600">
-                                  Removed by: <span className="font-medium">{removal.removedBy}</span>
-                                </p>
-                                <p className="text-xs text-gray-500 mt-1">
-                                  {new Date(removal.removedAt).toLocaleString()}
-                                </p>
-                              </div>
+                              {removal.isCaregiver && removal.participantName && (
+                                <p className="text-sm text-gray-600 mt-1">👥 Caregiver: {removal.userName}</p>
+                              )}
+                              <p className="text-sm text-gray-600 mt-1">{removal.userEmail} • {removal.userPhone}</p>
+                              {removal.reason && (
+                                <p className="text-sm text-gray-600 mt-1"><span className="font-medium">Reason:</span> {removal.reason}</p>
+                              )}
                             </div>
-                          );
-                        })}
-                      </div>
+                            <div className="text-right ml-4">
+                              <p className="text-sm text-gray-600">Removed by: <span className="font-medium">{removal.removedBy}</span></p>
+                              <p className="text-xs text-gray-500 mt-1">{new Date(removal.removedAt).toLocaleString()}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -942,88 +852,20 @@ export default function AdminPage() {
             )}
           </div>
         )}
-
-        {/* Calendar View Tab */}
-        {activeTab === 'calendar' && (
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-800">
-                {format(calendarMonth, 'MMMM yyyy')}
-              </h2>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1))}
-                  className="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  ← Prev
-                </button>
-                <button
-                  onClick={() => setCalendarMonth(new Date())}
-                  className="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  Today
-                </button>
-                <button
-                  onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1))}
-                  className="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  Next →
-                </button>
-              </div>
-            </div>
-
-            {/* Calendar Grid */}
-            <div className="grid grid-cols-7 gap-1">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-                <div key={day} className="p-2 text-center text-sm font-medium text-gray-500 border-b">
-                  {day}
-                </div>
-              ))}
-              
-              {/* Empty cells for days before month starts */}
-              {Array.from({ length: monthStart.getDay() }).map((_, i) => (
-                <div key={`empty-${i}`} className="p-2 min-h-[100px] bg-gray-50"></div>
-              ))}
-              
-              {/* Days of the month */}
-              {daysInMonth.map((day) => {
-                const dayEvents = getEventsForDay(day);
-                const isToday = isSameDay(day, new Date());
-                
-                return (
-                  <div
-                    key={day.toISOString()}
-                    className={`p-2 min-h-[100px] border ${isToday ? 'bg-blue-50 border-blue-200' : 'border-gray-100'}`}
-                  >
-                    <p className={`text-sm font-medium ${isToday ? 'text-blue-600' : 'text-gray-700'}`}>
-                      {format(day, 'd')}
-                    </p>
-                    <div className="mt-1 space-y-1">
-                      {dayEvents.slice(0, 3).map((event) => {
-                        const regs = getEventRegistrations(event.id).filter(r => r.status !== 'cancelled');
-                        return (
-                          <div
-                            key={event.id}
-                            className={`text-xs p-1 rounded truncate cursor-pointer ${categoryColors[event.category]?.replace('border-', 'border-l-2 border-l-')}`}
-                            title={`${event.title} - ${regs.length} registered`}
-                            onClick={() => { setSelectedEventForAttendance(event.id); setActiveTab('attendance'); }}
-                          >
-                            {event.title}
-                            <span className="ml-1 text-gray-500">({regs.length})</span>
-                          </div>
-                        );
-                      })}
-                      {dayEvents.length > 3 && (
-                        <p className="text-xs text-gray-500">+{dayEvents.length - 3} more</p>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </main>
+
+      {/* Event Form Modal */}
+      <EventFormModal
+        isOpen={showEventModal}
+        onClose={() => {
+          setShowEventModal(false);
+          setEditingEvent(null);
+          setSelectedDateForNewEvent('');
+        }}
+        onSubmit={handleEventSubmit}
+        editingEvent={editingEvent}
+        initialDate={selectedDateForNewEvent}
+      />
 
       {/* Waitlist Manager Modal */}
       {selectedEventForWaitlist && (
@@ -1033,6 +875,22 @@ export default function AdminPage() {
           onRefresh={fetchEvents}
         />
       )}
+
+      <style jsx>{`
+        @keyframes slide-in {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+        .animate-slide-in {
+          animation: slide-in 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
 }

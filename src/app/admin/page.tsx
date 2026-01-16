@@ -6,8 +6,9 @@ import { categoryColors } from '@/data/events';
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, startOfWeek, endOfWeek, addMonths, subMonths, isToday, isSameMonth } from 'date-fns';
 import WaitlistManager from '@/components/WaitlistManager';
 import EventFormModal from '@/components/EventFormModal';
+import UserManagement from '@/components/UserManagement';
 
-type TabType = 'events' | 'attendance' | 'calendar';
+type TabType = 'events' | 'attendance' | 'calendar' | 'users';
 
 export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -323,7 +324,7 @@ export default function AdminPage() {
             <div className="flex items-center gap-4">
               <h1 className="text-xl font-bold text-gray-800">MINDS Admin</h1>
               <div className="hidden sm:flex items-center bg-gray-100 rounded-lg p-1">
-                {(['calendar', 'events', 'attendance'] as TabType[]).map((tab) => (
+                {(['calendar', 'events', 'attendance', 'users'] as TabType[]).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
@@ -336,6 +337,7 @@ export default function AdminPage() {
                     {tab === 'calendar' && '📅 Calendar'}
                     {tab === 'events' && '📋 Events'}
                     {tab === 'attendance' && '✓ Attendance'}
+                    {tab === 'users' && '👤 Users'}
                   </button>
                 ))}
               </div>
@@ -352,7 +354,7 @@ export default function AdminPage() {
           
           {/* Mobile tabs */}
           <div className="sm:hidden pb-3 flex gap-2 overflow-x-auto">
-            {(['calendar', 'events', 'attendance'] as TabType[]).map((tab) => (
+            {(['calendar', 'events', 'attendance', 'users'] as TabType[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -365,6 +367,7 @@ export default function AdminPage() {
                 {tab === 'calendar' && '📅'}
                 {tab === 'events' && '📋'}
                 {tab === 'attendance' && '✓'}
+                {tab === 'users' && '👤'}
                 <span className="ml-1">{tab.charAt(0).toUpperCase() + tab.slice(1)}</span>
               </button>
             ))}
@@ -850,6 +853,13 @@ export default function AdminPage() {
                 )}
               </>
             )}
+          </div>
+        )}
+
+        {/* Users Tab */}
+        {activeTab === 'users' && (
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <UserManagement />
           </div>
         )}
       </main>

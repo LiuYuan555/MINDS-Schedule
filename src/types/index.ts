@@ -45,6 +45,8 @@ export type ViewMode = 'calendar' | 'list';
 
 export type UserRole = 'participant' | 'volunteer' | 'staff';
 
+export type UserStatus = 'pending' | 'active' | 'restricted';
+
 export type MembershipType = 'adhoc' | 'once_weekly' | 'twice_weekly' | 'three_plus_weekly';
 
 export interface User {
@@ -53,6 +55,7 @@ export interface User {
   email: string;
   phone: string;
   role: UserRole;
+  status: UserStatus; // pending = awaiting approval, active = can access, restricted = blocked
   membershipType?: MembershipType; // Only for participants
   // Caregiver fields
   isCaregiver?: boolean; // True if this user is a caregiver
@@ -64,6 +67,10 @@ export interface User {
   emergencyPhone?: string;
   // Tracking
   createdAt: string;
+  approvedAt?: string; // When admin approved the user
+  approvedBy?: string; // Admin who approved
+  lastUpdatedAt?: string; // Last modification timestamp
+  lastUpdatedBy?: string; // Who made the last update
 }
 
 export interface Registration {
@@ -111,4 +118,10 @@ export const MEMBERSHIP_LABELS: Record<MembershipType, string> = {
   once_weekly: 'Once a Week',
   twice_weekly: 'Twice a Week',
   three_plus_weekly: '3 or More Times a Week',
+};
+
+export const USER_STATUS_LABELS: Record<UserStatus, string> = {
+  pending: 'Pending Approval',
+  active: 'Active',
+  restricted: 'Restricted',
 };

@@ -7,9 +7,11 @@ import EventList from '@/components/EventList';
 import SignUpModal, { SignUpFormData, BulkRegistrationResult } from '@/components/SignUpModal';
 import { Event, ViewMode } from '@/types';
 import { startOfWeek, endOfWeek, parseISO, isWithinInterval } from 'date-fns';
+import { useLanguage, LanguageToggle } from '@/components/LanguageProvider';
 
 export default function Home() {
   const { user, isLoaded } = useUser();
+  const { t } = useLanguage();
   const [viewMode, setViewMode] = useState<ViewMode>('calendar');
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
@@ -229,7 +231,7 @@ export default function Home() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
-                Calendar
+                {t('userPortal', 'calendar')}
               </button>
               <button
                 onClick={() => setViewMode('list')}
@@ -242,7 +244,7 @@ export default function Home() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                 </svg>
-                List
+                {t('userPortal', 'list')}
               </button>
             </div>
 
@@ -262,33 +264,36 @@ export default function Home() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                 </svg>
-                {multiSelectMode ? 'Cancel Multi-Select' : 'Multi-Select'}
+                {multiSelectMode ? t('userPortal', 'cancelMultiSelect') : t('userPortal', 'multiSelect')}
               </button>
             )}
           </div>
 
-          {/* Navigation Links */}
-          <nav className="flex gap-4 text-sm">
-            <a href="/volunteer" className="text-green-600 hover:text-green-800 font-medium">
-              Volunteer Portal
-            </a>
-            <a href="/admin" className="text-gray-600 hover:text-gray-800">
-              Staff Login
-            </a>
-          </nav>
+          {/* Navigation Links and Language Toggle */}
+          <div className="flex items-center gap-4">
+            <LanguageToggle />
+            <nav className="flex gap-4 text-sm">
+              <a href="/volunteer" className="text-green-600 hover:text-green-800 font-medium">
+                {t('userPortal', 'volunteerPortal')}
+              </a>
+              <a href="/admin" className="text-gray-600 hover:text-gray-800">
+                {t('userPortal', 'staffLogin')}
+              </a>
+            </nav>
+          </div>
         </div>
 
         {/* Sign in prompt for non-authenticated users */}
         {isLoaded && !user && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
             <p className="text-blue-800 text-sm">
-              Please sign in to register for events.{' '}
+              {t('userPortal', 'signInPrompt')}{' '}
               <SignInButton mode="modal">
-                <button className="text-blue-600 hover:underline font-medium">Sign In</button>
+                <button className="text-blue-600 hover:underline font-medium">{t('common', 'signIn')}</button>
               </SignInButton>
-              {' '}or{' '}
+              {' '}{t('common', 'or')}{' '}
               <SignUpButton mode="modal">
-                <button className="text-blue-600 hover:underline font-medium">Create an Account</button>
+                <button className="text-blue-600 hover:underline font-medium">{t('userPortal', 'createAccount')}</button>
               </SignUpButton>
             </p>
           </div>
@@ -300,10 +305,10 @@ export default function Home() {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-semibold text-blue-900">
-                  {selectedEvents.length} event{selectedEvents.length !== 1 ? 's' : ''} selected
+                  {selectedEvents.length} {t('userPortal', 'eventsSelected')}
                 </h3>
                 <p className="text-sm text-blue-700 mt-1">
-                  Click "Register for Selected Events" to sign up for all at once
+                  {t('userPortal', 'clickToRegister')}
                 </p>
               </div>
               <button
@@ -313,7 +318,7 @@ export default function Home() {
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                Register for Selected Events
+                {t('userPortal', 'registerSelected')}
               </button>
             </div>
           </div>
@@ -323,7 +328,7 @@ export default function Home() {
         {multiSelectMode && selectedEvents.length === 0 && (
           <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
             <p className="text-purple-800 text-sm">
-              <strong>Multi-Select Mode:</strong> Click on events in the calendar to select multiple events for registration.
+              <strong>{t('userPortal', 'multiSelectMode')}:</strong> {t('userPortal', 'multiSelectHint')}
             </p>
           </div>
         )}
@@ -331,7 +336,7 @@ export default function Home() {
         {/* Events */}
         {isLoading ? (
           <div className="text-center py-12">
-            <p className="text-gray-500">Loading events...</p>
+            <p className="text-gray-500">{t('userPortal', 'loadingEvents')}</p>
           </div>
         ) : viewMode === 'calendar' ? (
           <Calendar 
@@ -349,9 +354,9 @@ export default function Home() {
       <footer className="bg-white border-t border-gray-200 mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="text-center text-gray-500 text-sm">
-            <p>© 2026 MINDS Singapore. Movement for the Intellectually Disabled of Singapore.</p>
+            <p>{t('userPortal', 'footerCopyright')}</p>
             <p className="mt-1">
-              For enquiries, contact us at{' '}
+              {t('userPortal', 'footerContact')}{' '}
               <a href="mailto:info@minds.org.sg" className="text-blue-600 hover:underline">
                 info@minds.org.sg
               </a>

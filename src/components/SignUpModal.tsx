@@ -5,6 +5,7 @@ import { format, parseISO } from 'date-fns';
 import { useUser } from '@clerk/nextjs';
 import { Event } from '@/types';
 import { categoryColors, skillLevelColors } from '@/data/events';
+import { useLanguage } from '@/components/LanguageProvider';
 
 export interface BulkRegistrationResult {
   eventId: string;
@@ -36,51 +37,52 @@ export interface SignUpFormData {
 }
 
 // Helper function to get user-friendly error display
-const getErrorDisplay = (error: string): { title: string; description: string; icon: string } => {
+const getErrorDisplay = (error: string, t: (section: 'signUpModal' | 'common', key: string) => string): { title: string; description: string; icon: string } => {
   if (error.includes('Already registered')) {
     return {
-      title: 'Already Registered',
-      description: 'You have already signed up for this event. Check "My Events" to view your registrations.',
+      title: t('signUpModal', 'alreadyRegistered'),
+      description: t('signUpModal', 'alreadyRegisteredDesc'),
       icon: 'duplicate'
     };
   }
   if (error.includes('Time conflict')) {
     return {
-      title: 'Schedule Conflict',
+      title: t('signUpModal', 'scheduleConflict'),
       description: error.replace('Time conflict: ', ''),
       icon: 'conflict'
     };
   }
   if (error.includes('Weekly limit reached')) {
     return {
-      title: 'Weekly Limit Reached',
+      title: t('signUpModal', 'weeklyLimitReached'),
       description: error.replace('Weekly limit reached: ', ''),
       icon: 'limit'
     };
   }
   if (error.includes('Event is full')) {
     return {
-      title: 'Event Full',
-      description: 'This event has reached maximum capacity. You can join the waitlist if available.',
+      title: t('signUpModal', 'eventFull'),
+      description: t('signUpModal', 'eventFullDesc'),
       icon: 'full'
     };
   }
   if (error.includes('No more volunteers needed')) {
     return {
-      title: 'Volunteer Spots Filled',
-      description: 'All volunteer positions for this event have been filled. Thank you for your interest!',
+      title: t('signUpModal', 'volunteerSpotsFilled'),
+      description: t('signUpModal', 'volunteerSpotsFilledDesc'),
       icon: 'full'
     };
   }
   return {
-    title: 'Registration Failed',
-    description: error || 'An unexpected error occurred. Please try again later.',
+    title: t('signUpModal', 'registrationFailedGeneric'),
+    description: error || t('signUpModal', 'unexpectedError'),
     icon: 'generic'
   };
 };
 
 export default function SignUpModal({ event, events = [], onClose, onSubmit, isBulkRegistration = false }: SignUpModalProps) {
   const { user } = useUser();
+  const { t } = useLanguage();
   const [formData, setFormData] = useState<SignUpFormData>({
     name: user?.fullName || '',
     email: user?.emailAddresses[0]?.emailAddress || '',
@@ -158,13 +160,13 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
               </div>
               <h3 className="text-xl font-semibold text-gray-800 mb-2 text-center">
                 {failureCount === 0 
-                  ? 'All Registrations Successful!' 
+                  ? t('signUpModal', 'allRegistrationsSuccessful')
                   : failureCount === bulkResults.length 
-                    ? 'Registration Failed'
-                    : 'Partial Registration Success'}
+                    ? t('signUpModal', 'registrationFailed')
+                    : t('signUpModal', 'partialSuccess')}
               </h3>
               <p className="text-gray-600 mb-4 text-center">
-                {successCount} of {bulkResults.length} events registered successfully.
+                {successCount} / {bulkResults.length} {t('signUpModal', 'eventsRegisteredSuccessfully')}
               </p>
               
               {/* Individual Event Results */}
@@ -190,9 +192,9 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
                         {result.eventTitle}
                       </p>
                       {result.success ? (
-                        <p className="text-xs text-green-600">Registered successfully</p>
+                        <p className="text-xs text-green-600">{t('signUpModal', 'registeredSuccessfully')}</p>
                       ) : (
-                        <p className="text-xs text-red-600">{result.error || 'Registration failed'}</p>
+                        <p className="text-xs text-red-600">{result.error || t('signUpModal', 'registrationFailed')}</p>
                       )}
                     </div>
                   </div>
@@ -208,26 +210,26 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <h3 className="text-xl font-semibold text-gray-800 mb-2">Registration Successful!</h3>
+                <h3 className="text-xl font-semibold text-gray-800 mb-2">{t('signUpModal', 'registrationSuccessful')}</h3>
                 <p className="text-gray-600 mb-4">
-                  You have been registered for <strong>{event.title}</strong>.
+                  {t('signUpModal', 'registeredFor')} <strong>{event.title}</strong>.
                 </p>
                 
                 {/* Confirmation notifications */}
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 text-left">
-                  <p className="text-blue-800 text-sm font-medium mb-2">📬 Confirmation sent:</p>
+                  <p className="text-blue-800 text-sm font-medium mb-2">📬 {t('signUpModal', 'confirmationSent')}</p>
                   <ul className="text-blue-700 text-sm space-y-1">
                     <li className="flex items-center gap-2">
                       <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                       </svg>
-                      Email confirmation sent to your email
+                      {t('signUpModal', 'emailConfirmation')}
                     </li>
                     <li className="flex items-center gap-2">
                       <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                       </svg>
-                      SMS reminder with event details sent to your phone
+                      {t('signUpModal', 'smsReminder')}
                     </li>
                   </ul>
                 </div>
@@ -235,7 +237,7 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
                 {event.caregiverPaymentRequired && (
                   <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4 text-left">
                     <p className="text-yellow-800 text-sm">
-                      <strong>Payment Required:</strong> Caregiver fee of ${event.caregiverPaymentAmount} is payable on arrival.
+                      <strong>{t('signUpModal', 'paymentRequired')}</strong> {t('signUpModal', 'caregiverFee')} ${event.caregiverPaymentAmount} {t('signUpModal', 'caregiverFeePayableOnArrival')}
                     </p>
                   </div>
                 )}
@@ -246,7 +248,7 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
             onClick={onClose}
             className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
           >
-            Close
+            {t('common', 'close')}
           </button>
         </div>
       </div>
@@ -259,7 +261,7 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold text-gray-800">
-            {isBulkRegistration ? 'Bulk Event Registration' : 'Event Registration'}
+            {isBulkRegistration ? t('signUpModal', 'bulkEventRegistration') : t('signUpModal', 'eventRegistration')}
           </h2>
           <button
             onClick={onClose}
@@ -277,7 +279,7 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
             <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 mb-6">
               <div className="flex items-start gap-3">
                 {(() => {
-                  const errorDisplay = getErrorDisplay(errorMessage);
+                  const errorDisplay = getErrorDisplay(errorMessage, t);
                   return (
                     <>
                       <div className="flex-shrink-0 mt-0.5">
@@ -332,7 +334,7 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
           {isBulkRegistration ? (
             <div className="bg-gray-50 rounded-lg p-4 mb-6">
               <h3 className="font-semibold text-gray-800 mb-3">
-                Registering for {events.length} events:
+                {t('signUpModal', 'registeringFor')} {events.length} {t('signUpModal', 'events')}:
               </h3>
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {events.map((evt) => (
@@ -348,7 +350,7 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
                 ))}
               </div>
               <p className="text-xs text-gray-500 mt-3">
-                All events will use the same registration details below.
+                {t('signUpModal', 'allEventsUseSameDetails')}
               </p>
             </div>
           ) : (
@@ -380,27 +382,27 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
                 <div className="flex flex-wrap gap-2 mt-3">
                   {event.isRecurring && (
                     <span className="inline-flex items-center gap-1 text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
-                      🔄 Recurring Event
+                      🔄 {t('signUpModal', 'recurringEvent')}
                     </span>
                   )}
                   {event.wheelchairAccessible && (
                     <span className="inline-flex items-center gap-1 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-                      ♿ Wheelchair Accessible
+                      ♿ {t('signUpModal', 'wheelchairAccessible')}
                     </span>
                   )}
                   {event.caregiverRequired && (
                     <span className="inline-flex items-center gap-1 text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full">
-                      👥 Caregiver Required
+                      👥 {t('signUpModal', 'caregiverRequired')}
                     </span>
                   )}
                   {event.caregiverPaymentRequired && (
                     <span className="inline-flex items-center gap-1 text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">
-                      💰 Caregiver Fee: ${event.caregiverPaymentAmount}
+                      💰 {t('signUpModal', 'caregiverFee')}: ${event.caregiverPaymentAmount}
                     </span>
                   )}
                   {event.ageRestriction && (
                     <span className="inline-flex items-center gap-1 text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
-                      🎂 Age: {event.ageRestriction}
+                      🎂 {t('signUpModal', 'age')}: {event.ageRestriction}
                     </span>
                   )}
                 </div>
@@ -425,17 +427,17 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
                     {isEventFull ? (
                       <div className="space-y-2">
                         <div className="text-sm font-medium text-red-600">
-                          Event is full - Join waitlist
+                          {t('signUpModal', 'joinWaitlist')}
                         </div>
                         {waitlistCount > 0 && (
                           <div className="text-xs text-gray-500">
-                            {waitlistCount} {waitlistCount === 1 ? 'person' : 'people'} on waitlist
+                            {waitlistCount} {waitlistCount === 1 ? t('signUpModal', 'personOnWaitlist') : t('signUpModal', 'peopleOnWaitlist')}
                           </div>
                         )}
                       </div>
                     ) : (
                       <div className={`text-sm font-medium ${spotsLeft <= 5 ? 'text-red-600' : 'text-green-600'}`}>
-                        {spotsLeft} {spotsLeft === 1 ? 'spot' : 'spots'} remaining
+                        {spotsLeft} {spotsLeft === 1 ? t('signUpModal', 'spotRemaining') : t('signUpModal', 'spotsRemaining')}
                       </div>
                     )}
                   </div>
@@ -453,11 +455,10 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
                 <div>
-                  <h4 className="font-semibold text-yellow-900 mb-1">Event is Full - Request Waitlist</h4>
+                  <h4 className="font-semibold text-yellow-900 mb-1">{t('signUpModal', 'waitlistNoticeTitle')}</h4>
                   <p className="text-sm text-yellow-800">
-                    This event has reached capacity. By submitting this form, you'll submit a waitlist request.
-                    {waitlistCount > 0 && ` There are currently ${waitlistCount} waitlist requests.`}
-                    {' '}Staff will review requests and add selected participants to the waitlist. You'll be contacted if approved and when a spot becomes available.
+                    {t('signUpModal', 'waitlistNoticeText')}
+                    {waitlistCount > 0 && ` ${t('signUpModal', 'waitlistRequests')} ${waitlistCount} ${t('signUpModal', 'waitlistRequestsSuffix')}`}
                   </p>
                 </div>
               </div>
@@ -485,14 +486,14 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
                   className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
                 />
                 <label htmlFor="isCaregiver" className="text-sm font-medium text-gray-700">
-                  I am a caregiver registering on behalf of someone under my care
+                  {t('signUpModal', 'iAmCaregiver')}
                 </label>
               </div>
               
               {formData.isCaregiver && (
                 <div className="mt-3">
                   <label htmlFor="participantName" className="block text-sm font-medium text-gray-700 mb-1">
-                    Name of Person Under Your Care <span className="text-red-500">*</span>
+                    {t('signUpModal', 'participantName')} <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -501,9 +502,9 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
                     value={formData.participantName}
                     onChange={(e) => setFormData({ ...formData, participantName: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black"
-                    placeholder="Enter participant's name"
+                    placeholder={t('signUpModal', 'enterParticipantName')}
                   />
-                  <p className="text-xs text-gray-500 mt-1">This is the name that will appear in staff reports.</p>
+                  <p className="text-xs text-gray-500 mt-1">{t('signUpModal', 'participantNameHint')}</p>
                 </div>
               )}
             </div>
@@ -511,7 +512,7 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-                  {formData.isCaregiver ? 'Caregiver Name' : 'Full Name'} <span className="text-red-500">*</span>
+                  {formData.isCaregiver ? t('signUpModal', 'caregiverName') : t('signUpModal', 'fullName')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -521,12 +522,12 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
                   value={user?.fullName || ''}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed outline-none"
                 />
-                <p className="text-xs text-gray-500 mt-1">Name is linked to your account.</p>
+                <p className="text-xs text-gray-500 mt-1">{t('signUpModal', 'nameLinkedToAccount')}</p>
               </div>
 
               <div>
                 <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
-                  Phone Number <span className="text-red-500">*</span>
+                  {t('signUpModal', 'phoneNumber')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="tel"
@@ -537,14 +538,14 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/[^0-9]/g, '') })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black"
-                  placeholder="Enter your phone number"
+                  placeholder={t('signUpModal', 'enterPhoneNumber')}
                 />
               </div>
             </div>
 
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                Email Address <span className="text-red-500">*</span>
+                {t('signUpModal', 'emailAddress')} <span className="text-red-500">*</span>
               </label>
               <input
                 type="email"
@@ -554,7 +555,7 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
                 value={user?.emailAddresses[0]?.emailAddress || ''}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed outline-none"
               />
-              <p className="text-xs text-gray-500 mt-1">Email is linked to your account.</p>
+              <p className="text-xs text-gray-500 mt-1">{t('signUpModal', 'emailLinkedToAccount')}</p>
             </div>
 
             {/* Accessibility Options */}
@@ -568,7 +569,7 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
                   className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
                 />
                 <label htmlFor="wheelchairAccess" className="text-sm text-gray-700">
-                  I require wheelchair accessibility
+                  {t('signUpModal', 'wheelchairAccessNeeded')}
                 </label>
               </div>
             )}
@@ -586,7 +587,7 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
                     className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
                   />
                   <label htmlFor="hasCaregiverAccompanying" className="text-sm text-gray-700">
-                    Caregiver will be accompanying {event.caregiverRequired && <span className="text-red-500">(Required)</span>}
+                    {t('signUpModal', 'caregiverAccompanying')} {event.caregiverRequired && <span className="text-red-500">({t('common', 'required')})</span>}
                   </label>
                 </div>
 
@@ -594,7 +595,7 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ml-6">
                   <div>
                     <label htmlFor="caregiverName" className="block text-sm font-medium text-gray-700 mb-1">
-                      Caregiver Name <span className="text-red-500">*</span>
+                      {t('signUpModal', 'caregiverName')} <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -603,12 +604,12 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
                       value={formData.caregiverName}
                       onChange={(e) => setFormData({ ...formData, caregiverName: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black"
-                      placeholder="Caregiver's full name"
+                      placeholder={t('signUpModal', 'caregiverFullName')}
                     />
                   </div>
                   <div>
                     <label htmlFor="caregiverPhone" className="block text-sm font-medium text-gray-700 mb-1">
-                      Caregiver Phone <span className="text-red-500">*</span>
+                      {t('signUpModal', 'caregiverPhone')} <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="tel"
@@ -619,13 +620,13 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
                       value={formData.caregiverPhone}
                       onChange={(e) => setFormData({ ...formData, caregiverPhone: e.target.value.replace(/[^0-9]/g, '') })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black"
-                      placeholder="Caregiver's phone number"
+                      placeholder={t('signUpModal', 'caregiverPhoneNumber')}
                     />
                   </div>
                   {event.caregiverPaymentRequired && (
                     <div className="col-span-2 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                       <p className="text-yellow-800 text-sm">
-                        💰 Caregiver fee: <strong>${event.caregiverPaymentAmount}</strong> - payable on arrival
+                        💰 {t('signUpModal', 'caregiverFeePayable')} <strong>${event.caregiverPaymentAmount}</strong> {t('signUpModal', 'payableOnArrival')}
                       </p>
                     </div>
                   )}
@@ -636,7 +637,7 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
 
             <div>
               <label htmlFor="dietary" className="block text-sm font-medium text-gray-700 mb-1">
-                Dietary Requirements
+                {t('signUpModal', 'dietaryRequirements')}
               </label>
               <input
                 type="text"
@@ -644,13 +645,13 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
                 value={formData.dietaryRequirements}
                 onChange={(e) => setFormData({ ...formData, dietaryRequirements: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black"
-                placeholder="e.g., Vegetarian, Halal, No nuts"
+                placeholder={t('signUpModal', 'dietaryPlaceholder')}
               />
             </div>
 
             <div>
               <label htmlFor="specialNeeds" className="block text-sm font-medium text-gray-700 mb-1">
-                Special Needs / Additional Requirements
+                {t('signUpModal', 'specialNeeds')}
               </label>
               <textarea
                 id="specialNeeds"
@@ -658,7 +659,7 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
                 onChange={(e) => setFormData({ ...formData, specialNeeds: e.target.value })}
                 rows={3}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black"
-                placeholder="Please let us know if you have any special requirements"
+                placeholder={t('signUpModal', 'specialNeedsPlaceholder')}
               />
             </div>
 
@@ -668,7 +669,7 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
                 onClick={onClose}
                 className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
               >
-                Cancel
+                {t('common', 'cancel')}
               </button>
               <button
                 type="submit"
@@ -680,12 +681,12 @@ export default function SignUpModal({ event, events = [], onClose, onSubmit, isB
                 }`}
               >
                 {isSubmitting 
-                  ? 'Submitting...' 
+                  ? t('signUpModal', 'submitting')
                   : isBulkRegistration 
-                    ? `Register for ${events.length} Events` 
+                    ? `${t('signUpModal', 'registerForEvents')} ${events.length} ${t('signUpModal', 'events')}` 
                     : isEventFull
-                      ? 'Request Waitlist'
-                      : 'Register'
+                      ? t('signUpModal', 'requestWaitlist')
+                      : t('common', 'register')
                 }
               </button>
             </div>

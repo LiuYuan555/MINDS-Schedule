@@ -5,9 +5,11 @@ import { useUser, SignInButton, SignUpButton, UserButton } from '@clerk/nextjs';
 import { Event } from '@/types';
 import { categoryColors } from '@/data/events';
 import { format, parseISO } from 'date-fns';
+import { useLanguage, LanguageToggle } from '@/components/LanguageProvider';
 
 export default function VolunteerPage() {
   const { user, isLoaded } = useUser();
+  const { t } = useLanguage();
   const [events, setEvents] = useState<Event[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [myRegistrations, setMyRegistrations] = useState<string[]>([]);
@@ -95,28 +97,29 @@ export default function VolunteerPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-green-600">MINDS Volunteer Portal</h1>
-              <p className="text-gray-600 text-sm mt-1">Make a difference in someone&apos;s life</p>
+              <h1 className="text-2xl font-bold text-green-600">{t('volunteerPortal', 'title')}</h1>
+              <p className="text-gray-600 text-sm mt-1">{t('volunteerPortal', 'subtitle')}</p>
             </div>
             <div className="flex items-center gap-4">
+              <LanguageToggle />
               <a href="/" className="text-blue-600 hover:text-blue-800 text-sm">
-                ← Back to Calendar
+                {t('common', 'backToCalendar')}
               </a>
               {isLoaded && user ? (
                 <div className="flex items-center gap-3">
-                  <span className="text-sm text-gray-600">Welcome, {user.firstName || 'Volunteer'}</span>
+                  <span className="text-sm text-gray-600">{t('common', 'welcome')}, {user.firstName || t('common', 'volunteer')}</span>
                   <UserButton afterSignOutUrl="/volunteer" />
                 </div>
               ) : (
                 <div className="flex gap-2">
                   <SignInButton mode="modal">
                     <button className="px-4 py-2 text-sm text-green-600 border border-green-600 rounded-lg hover:bg-green-50">
-                      Sign In
+                      {t('common', 'signIn')}
                     </button>
                   </SignInButton>
                   <SignUpButton mode="modal">
                     <button className="px-4 py-2 text-sm text-white bg-green-600 rounded-lg hover:bg-green-700">
-                      Sign Up
+                      {t('common', 'signUp')}
                     </button>
                   </SignUpButton>
                 </div>
@@ -130,26 +133,25 @@ export default function VolunteerPage() {
         {/* Welcome Section for New Volunteers */}
         {isLoaded && !user && (
           <div className="bg-green-50 border border-green-200 rounded-xl p-6 mb-8">
-            <h2 className="text-xl font-semibold text-green-800 mb-2">Welcome to MINDS Volunteer Portal!</h2>
+            <h2 className="text-xl font-semibold text-green-800 mb-2">{t('volunteerPortal', 'welcomeTitle')}</h2>
             <p className="text-green-700 mb-4">
-              Thank you for your interest in volunteering with MINDS Singapore. Our volunteers play a crucial role 
-              in supporting people with intellectual disabilities and their families.
+              {t('volunteerPortal', 'welcomeText')}
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
               <div className="bg-white rounded-lg p-4">
                 <div className="text-2xl mb-2">📋</div>
-                <h3 className="font-medium text-gray-800">1. Sign Up</h3>
-                <p className="text-sm text-gray-600">Create your volunteer account</p>
+                <h3 className="font-medium text-gray-800">{t('volunteerPortal', 'step1Title')}</h3>
+                <p className="text-sm text-gray-600">{t('volunteerPortal', 'step1Text')}</p>
               </div>
               <div className="bg-white rounded-lg p-4">
                 <div className="text-2xl mb-2">🔍</div>
-                <h3 className="font-medium text-gray-800">2. Browse Events</h3>
-                <p className="text-sm text-gray-600">Find events that match your interests and schedule</p>
+                <h3 className="font-medium text-gray-800">{t('volunteerPortal', 'step2Title')}</h3>
+                <p className="text-sm text-gray-600">{t('volunteerPortal', 'step2Text')}</p>
               </div>
               <div className="bg-white rounded-lg p-4">
                 <div className="text-2xl mb-2">✅</div>
-                <h3 className="font-medium text-gray-800">3. Volunteer</h3>
-                <p className="text-sm text-gray-600">Register for events and make a difference</p>
+                <h3 className="font-medium text-gray-800">{t('volunteerPortal', 'step3Title')}</h3>
+                <p className="text-sm text-gray-600">{t('volunteerPortal', 'step3Text')}</p>
               </div>
             </div>
           </div>
@@ -157,7 +159,7 @@ export default function VolunteerPage() {
 
         {/* Filter */}
         <div className="flex items-center gap-4 mb-6">
-          <span className="text-sm font-medium text-gray-700">Show:</span>
+          <span className="text-sm font-medium text-gray-700">{t('common', 'show')}:</span>
           <div className="flex gap-2">
             <button
               onClick={() => setFilter('needs-volunteers')}
@@ -167,7 +169,7 @@ export default function VolunteerPage() {
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              Needs Volunteers
+              {t('volunteerPortal', 'needsVolunteers')}
             </button>
             <button
               onClick={() => setFilter('all')}
@@ -177,7 +179,7 @@ export default function VolunteerPage() {
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              All Events
+              {t('volunteerPortal', 'allEvents')}
             </button>
           </div>
         </div>
@@ -185,13 +187,13 @@ export default function VolunteerPage() {
         {/* Events List */}
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h2 className="text-lg font-semibold text-gray-800 mb-4">
-            {filter === 'needs-volunteers' ? 'Events Needing Volunteers' : 'All Upcoming Events'}
+            {filter === 'needs-volunteers' ? t('volunteerPortal', 'eventsNeedingVolunteers') : t('volunteerPortal', 'allUpcomingEvents')}
           </h2>
 
           {isLoading ? (
-            <p className="text-gray-500">Loading events...</p>
+            <p className="text-gray-500">{t('common', 'loading')}</p>
           ) : sortedEvents.length === 0 ? (
-            <p className="text-gray-500">No events found.</p>
+            <p className="text-gray-500">{t('volunteerPortal', 'noEventsFound')}</p>
           ) : (
             <div className="space-y-4">
               {sortedEvents.map((event) => {
@@ -229,7 +231,7 @@ export default function VolunteerPage() {
                         <div className="flex flex-wrap gap-2 mt-2">
                           {!event.wheelchairAccessible && (
                             <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
-                              Not wheelchair accessible
+                              {t('volunteerPortal', 'notWheelchairAccessible')}
                             </span>
                           )}
                         </div>
@@ -237,14 +239,14 @@ export default function VolunteerPage() {
                     </div>
                     <div className="mt-4 md:mt-0 md:ml-4 flex flex-col items-end gap-2">
                       <div className={`text-sm font-medium ${spotsLeft > 0 ? 'text-green-600' : 'text-gray-500'}`}>
-                        {spotsLeft > 0 ? `${spotsLeft} volunteer spots left` : 'Fully staffed'}
+                        {spotsLeft > 0 ? `${spotsLeft} ${t('volunteerPortal', 'volunteerSpotsLeft')}` : t('volunteerPortal', 'fullyStaffed')}
                       </div>
                       <div className="text-xs text-gray-500">
-                        {currentVolunteers}/{volunteersNeeded} volunteers
+                        {currentVolunteers}/{volunteersNeeded} {t('volunteerPortal', 'volunteers')}
                       </div>
                       {isRegistered ? (
                         <span className="px-4 py-2 text-sm text-green-600 bg-green-100 rounded-lg">
-                          ✓ Registered
+                          ✓ {t('common', 'registered')}
                         </span>
                       ) : spotsLeft > 0 ? (
                         user ? (
@@ -252,18 +254,18 @@ export default function VolunteerPage() {
                             onClick={() => handleVolunteerSignup(event)}
                             className="px-4 py-2 text-sm text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
                           >
-                            Volunteer
+                            {t('common', 'volunteer')}
                           </button>
                         ) : (
                           <SignInButton mode="modal">
                             <button className="px-4 py-2 text-sm text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors">
-                              Sign in to Volunteer
+                              {t('volunteerPortal', 'signInToVolunteer')}
                             </button>
                           </SignInButton>
                         )
                       ) : (
                         <span className="px-4 py-2 text-sm text-gray-500 bg-gray-100 rounded-lg">
-                          Full
+                          {t('common', 'full')}
                         </span>
                       )}
                     </div>

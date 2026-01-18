@@ -588,7 +588,7 @@ export default function AdminPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [showEventModal, setShowEventModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
-  const [selectedEventForAttendance, setSelectedEventForAttendance] = useState<string | null>(null);
+  const [expandedEventIds, setExpandedEventIds] = useState<Set<string>>(new Set());
   const [selectedEventForWaitlist, setSelectedEventForWaitlist] = useState<Event | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
   const [selectedDateForNewEvent, setSelectedDateForNewEvent] = useState<string>('');
@@ -596,6 +596,10 @@ export default function AdminPage() {
   const [calendarView, setCalendarView] = useState<'month' | 'week'>('month');
   const [hoveredEvent, setHoveredEvent] = useState<string | null>(null);
   const [eventsFilter, setEventsFilter] = useState<'upcoming' | 'past'>('upcoming');
+  const [attendanceFilter, setAttendanceFilter] = useState<'all' | 'upcoming' | 'past'>('all');
+  const [attendanceCategoryFilter, setAttendanceCategoryFilter] = useState<string>('all');
+  const [attendanceSortBy, setAttendanceSortBy] = useState<'date' | 'category' | 'name'>('date');
+  const [attendanceSortOrder, setAttendanceSortOrder] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
     const storedAuth = localStorage.getItem('adminAuthenticated');
@@ -607,16 +611,30 @@ export default function AdminPage() {
     setIsCheckingAuth(false);
   }, []);
 
-  // Fetch removal history when event is selected
+  // Fetch removal history when events are expanded
   useEffect(() => {
-    if (selectedEventForAttendance) {
-      fetchRemovalHistory(selectedEventForAttendance).catch(() => {
+    const fetchAllRemovalHistories = async () => {
+      if (expandedEventIds.size === 0) {
         setRemovalHistory([]);
-      });
-    } else {
-      setRemovalHistory([]);
-    }
-  }, [selectedEventForAttendance]);
+        return;
+      }
+      
+      const allHistories: any[] = [];
+      for (const eventId of expandedEventIds) {
+        try {
+          const history = await fetchRemovalHistory(eventId);
+          if (history && history.length > 0) {
+            allHistories.push(...history.map((h: any) => ({ ...h, eventId })));
+          }
+        } catch {
+          // Ignore errors for individual fetches
+        }
+      }
+      setRemovalHistory(allHistories);
+    };
+    
+    fetchAllRemovalHistories();
+  }, [expandedEventIds]);
 
   // Auto-dismiss messages after 5 seconds
   useEffect(() => {
@@ -793,8 +811,9 @@ export default function AdminPage() {
 
       if (response.ok) {
         setRegistrations(registrations.filter((r) => r.id !== registration.id));
-        if (selectedEventForAttendance) {
-          fetchRemovalHistory(selectedEventForAttendance);
+        // Refresh removal history for the event
+        if (registration.eventId && expandedEventIds.has(registration.eventId)) {
+          fetchRemovalHistory(registration.eventId);
         }
         setMessage({ type: 'success', text: `${displayName} has been removed from the event.` });
       } else {
@@ -1281,173 +1300,289 @@ export default function AdminPage() {
           <div className="bg-white rounded-xl shadow-sm p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-4">Attendance Tracking</h2>
             
-            {/* Event Selector */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Select Event</label>
-              <select
-                value={selectedEventForAttendance || ''}
-                onChange={(e) => setSelectedEventForAttendance(e.target.value || null)}
-                className="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-800"
-              >
-                <option value="">-- Select an event --</option>
-                {events
-                  .filter(e => e.eventStatus !== 'past')
-                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                  .map((event) => (
-                    <option key={event.id} value={event.id}>
-                      {event.title} - {format(parseISO(event.date), 'MMM d, yyyy')}
-                    </option>
-                  ))}
-              </select>
+            {/* Filters and Sorting */}
+            <div className="mb-6 space-y-4">
+              {/* Filter Row */}
+              <div className="flex flex-wrap items-center gap-4">
+                {/* Time Period Filter */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-gray-700">Time:</span>
+                  <div className="flex bg-gray-100 rounded-lg p-1">
+                    <button
+                      onClick={() => setAttendanceFilter('all')}
+                      className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                        attendanceFilter === 'all'
+                          ? 'bg-white text-blue-600 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-800'
+                      }`}
+                    >
+                      All
+                    </button>
+                    <button
+                      onClick={() => setAttendanceFilter('upcoming')}
+                      className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                        attendanceFilter === 'upcoming'
+                          ? 'bg-white text-blue-600 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-800'
+                      }`}
+                    >
+                      Upcoming
+                    </button>
+                    <button
+                      onClick={() => setAttendanceFilter('past')}
+                      className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                        attendanceFilter === 'past'
+                          ? 'bg-white text-blue-600 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-800'
+                      }`}
+                    >
+                      Past
+                    </button>
+                  </div>
+                </div>
+
+                {/* Category Filter */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-gray-700">Category:</span>
+                  <select
+                    value={attendanceCategoryFilter}
+                    onChange={(e) => setAttendanceCategoryFilter(e.target.value)}
+                    className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none text-gray-800"
+                  >
+                    <option value="all">All Categories</option>
+                    {Array.from(new Set(events.map(e => e.category))).sort().map(category => (
+                      <option key={category} value={category}>{category}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Sort Options */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-gray-700">Sort by:</span>
+                  <select
+                    value={attendanceSortBy}
+                    onChange={(e) => setAttendanceSortBy(e.target.value as 'date' | 'category' | 'name')}
+                    className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none text-gray-800"
+                  >
+                    <option value="date">Date</option>
+                    <option value="category">Category</option>
+                    <option value="name">Event Name</option>
+                  </select>
+                  <button
+                    onClick={() => setAttendanceSortOrder(attendanceSortOrder === 'asc' ? 'desc' : 'asc')}
+                    className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    title={attendanceSortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                  >
+                    {attendanceSortOrder === 'asc' ? (
+                      <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Expand/Collapse All */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const filteredEvents = events.filter(e => {
+                      const timeMatch = attendanceFilter === 'all' || 
+                        (attendanceFilter === 'upcoming' && e.eventStatus !== 'past') ||
+                        (attendanceFilter === 'past' && e.eventStatus === 'past');
+                      const categoryMatch = attendanceCategoryFilter === 'all' || e.category === attendanceCategoryFilter;
+                      return timeMatch && categoryMatch;
+                    });
+                    setExpandedEventIds(new Set(filteredEvents.map(e => e.id)));
+                  }}
+                  className="px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                >
+                  Expand All
+                </button>
+                <button
+                  onClick={() => setExpandedEventIds(new Set())}
+                  className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Collapse All
+                </button>
+              </div>
             </div>
 
-            {selectedEventForAttendance && (
-              <>
-                {(() => {
-                  const eventRegs = getEventRegistrations(selectedEventForAttendance);
-                  const activeRegs = eventRegs.filter((r) => r.status !== 'cancelled');
-                  const participants = activeRegs.filter((r) => r.registrationType === 'participant');
-                  const volunteers = activeRegs.filter((r) => r.registrationType === 'volunteer');
-                  const attended = activeRegs.filter((r) => r.status === 'attended').length;
-                  const cancelled = eventRegs.filter((r) => r.status === 'cancelled').length;
+            {/* Events List */}
+            <div className="space-y-4">
+              {(() => {
+                const filteredEvents = events
+                  .filter(e => {
+                    const timeMatch = attendanceFilter === 'all' || 
+                      (attendanceFilter === 'upcoming' && e.eventStatus !== 'past') ||
+                      (attendanceFilter === 'past' && e.eventStatus === 'past');
+                    const categoryMatch = attendanceCategoryFilter === 'all' || e.category === attendanceCategoryFilter;
+                    return timeMatch && categoryMatch;
+                  })
+                  .sort((a, b) => {
+                    const multiplier = attendanceSortOrder === 'asc' ? 1 : -1;
+                    if (attendanceSortBy === 'date') {
+                      return multiplier * (new Date(a.date).getTime() - new Date(b.date).getTime());
+                    }
+                    if (attendanceSortBy === 'category') {
+                      const catCompare = a.category.localeCompare(b.category);
+                      if (catCompare !== 0) return multiplier * catCompare;
+                      return new Date(b.date).getTime() - new Date(a.date).getTime();
+                    }
+                    if (attendanceSortBy === 'name') {
+                      return multiplier * a.title.localeCompare(b.title);
+                    }
+                    return 0;
+                  });
+
+                if (filteredEvents.length === 0) {
+                  return (
+                    <div className="text-center py-12 text-gray-500">
+                      <p>No events match your filters.</p>
+                    </div>
+                  );
+                }
+
+                return filteredEvents.map(event => {
+                  const eventRegs = getEventRegistrations(event.id);
+                  const activeRegs = eventRegs.filter(r => r.status !== 'cancelled');
+                  const attended = activeRegs.filter(r => r.status === 'attended').length;
+                  const participants = activeRegs.filter(r => r.registrationType === 'participant').length;
+                  const volunteers = activeRegs.filter(r => r.registrationType === 'volunteer').length;
+                  const isExpanded = expandedEventIds.has(event.id);
 
                   return (
-                    <>
-                      {/* Summary Stats */}
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-                        <div className="bg-blue-50 rounded-xl p-4 text-center">
-                          <p className="text-2xl font-bold text-blue-600">{activeRegs.length}</p>
-                          <p className="text-sm text-gray-600">Active</p>
+                    <div key={event.id} className="border border-gray-200 rounded-xl overflow-hidden">
+                      {/* Event Header - Clickable */}
+                      <button
+                        onClick={() => {
+                          const newSet = new Set(expandedEventIds);
+                          if (isExpanded) {
+                            newSet.delete(event.id);
+                          } else {
+                            newSet.add(event.id);
+                          }
+                          setExpandedEventIds(newSet);
+                        }}
+                        className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className={`w-3 h-3 rounded-full ${
+                            event.eventStatus === 'past' ? 'bg-gray-400' : 'bg-green-500'
+                          }`} />
+                          <div>
+                            <h3 className="font-semibold text-gray-800">{event.title}</h3>
+                            <p className="text-sm text-gray-600">
+                              {format(parseISO(event.date), 'EEEE, MMM d, yyyy')} • {event.time}
+                              <span className="ml-2 px-2 py-0.5 bg-gray-200 text-gray-700 rounded-full text-xs">
+                                {event.category}
+                              </span>
+                              {event.eventStatus === 'past' && (
+                                <span className="ml-2 px-2 py-0.5 bg-gray-300 text-gray-700 rounded-full text-xs">
+                                  Past
+                                </span>
+                              )}
+                            </p>
+                          </div>
                         </div>
-                        <div className="bg-green-50 rounded-xl p-4 text-center">
-                          <p className="text-2xl font-bold text-green-600">{attended}</p>
-                          <p className="text-sm text-gray-600">Attended</p>
+                        <div className="flex items-center gap-4">
+                          {/* Quick Stats */}
+                          <div className="flex items-center gap-3 text-sm">
+                            <span className="text-blue-600 font-medium">{activeRegs.length} registered</span>
+                            <span className="text-green-600 font-medium">{attended} attended</span>
+                            <span className="text-purple-600">{participants} participants</span>
+                            <span className="text-orange-600">{volunteers} volunteers</span>
+                          </div>
+                          <svg 
+                            className={`w-5 h-5 text-gray-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} 
+                            fill="none" 
+                            stroke="currentColor" 
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
                         </div>
-                        <div className="bg-purple-50 rounded-xl p-4 text-center">
-                          <p className="text-2xl font-bold text-purple-600">{participants.length}</p>
-                          <p className="text-sm text-gray-600">Participants</p>
-                        </div>
-                        <div className="bg-orange-50 rounded-xl p-4 text-center">
-                          <p className="text-2xl font-bold text-orange-600">{volunteers.length}</p>
-                          <p className="text-sm text-gray-600">Volunteers</p>
-                        </div>
-                        <div className="bg-red-50 rounded-xl p-4 text-center">
-                          <p className="text-2xl font-bold text-red-600">{cancelled}</p>
-                          <p className="text-sm text-gray-600">Cancelled</p>
-                        </div>
-                      </div>
+                      </button>
 
-                      {/* Registrations List */}
-                      {eventRegs.length === 0 ? (
-                        <p className="text-gray-500 text-center py-8">No registrations for this event.</p>
-                      ) : (
-                        <div className="space-y-3">
-                          {eventRegs.map((reg) => (
-                            <div key={reg.id} className={`flex flex-col md:flex-row md:items-center justify-between p-4 border rounded-xl gap-4 transition-colors ${
-                              reg.status === 'cancelled' ? 'border-red-200 bg-red-50' : 'border-gray-200 hover:bg-gray-50'
-                            }`}>
-                              <div>
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <p className={`font-medium ${reg.status === 'cancelled' ? 'text-gray-500 line-through' : 'text-gray-800'}`}>
-                                    {getDisplayName(reg)}
-                                  </p>
-                                  {reg.isCaregiver && (
-                                    <span className="text-xs px-2 py-1 rounded-full bg-indigo-100 text-indigo-800">
-                                      👤 Caregiver
-                                    </span>
-                                  )}
-                                  <span className={`text-xs px-2 py-1 rounded-full ${
-                                    reg.registrationType === 'volunteer' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
-                                  }`}>
-                                    {reg.registrationType}
-                                  </span>
-                                  {reg.status === 'cancelled' && (
-                                    <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-800">Cancelled</span>
-                                  )}
+                      {/* Expanded Content */}
+                      {isExpanded && (
+                        <div className="p-4 bg-white">
+                          {eventRegs.length === 0 ? (
+                            <p className="text-gray-500 text-center py-4">No registrations for this event.</p>
+                          ) : (
+                            <div className="space-y-3">
+                              {eventRegs.map((reg) => (
+                                <div key={reg.id} className={`flex flex-col md:flex-row md:items-center justify-between p-4 border rounded-xl gap-4 transition-colors ${
+                                  reg.status === 'cancelled' ? 'border-red-200 bg-red-50' : 'border-gray-200 hover:bg-gray-50'
+                                }`}>
+                                  <div>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <p className={`font-medium ${reg.status === 'cancelled' ? 'text-gray-500 line-through' : 'text-gray-800'}`}>
+                                        {getDisplayName(reg)}
+                                      </p>
+                                      {reg.isCaregiver && (
+                                        <span className="text-xs px-2 py-1 rounded-full bg-indigo-100 text-indigo-800">
+                                          👤 Caregiver
+                                        </span>
+                                      )}
+                                      <span className={`text-xs px-2 py-1 rounded-full ${
+                                        reg.registrationType === 'volunteer' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+                                      }`}>
+                                        {reg.registrationType}
+                                      </span>
+                                      {reg.status === 'cancelled' && (
+                                        <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-800">Cancelled</span>
+                                      )}
+                                    </div>
+                                    <p className="text-sm text-gray-600 mt-1">{reg.userEmail} • {reg.userPhone}</p>
+                                    {reg.isCaregiver && (
+                                      <p className="text-xs text-indigo-600 mt-1">👥 Caregiver: {reg.userName}</p>
+                                    )}
+                                    {reg.needsWheelchairAccess && <p className="text-xs text-blue-600 mt-1">♿ Needs wheelchair access</p>}
+                                    {reg.hasCaregiverAccompanying && <p className="text-xs text-orange-600 mt-1">👥 Caregiver: {reg.caregiverName}</p>}
+                                    {reg.dietaryRequirements && <p className="text-xs text-gray-500 mt-1">🍽️ {reg.dietaryRequirements}</p>}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <select
+                                      value={reg.status}
+                                      onChange={(e) => handleAttendanceUpdate(reg.id, e.target.value)}
+                                      disabled={reg.status === 'cancelled'}
+                                      className={`px-3 py-2 border rounded-lg text-sm font-medium ${
+                                        reg.status === 'attended' ? 'bg-green-100 border-green-300 text-green-800' :
+                                        reg.status === 'absent' ? 'bg-red-100 border-red-300 text-red-800' :
+                                        reg.status === 'cancelled' ? 'bg-red-100 border-red-300 text-red-800' :
+                                        'bg-gray-100 border-gray-300 text-gray-800'
+                                      }`}
+                                    >
+                                      <option value="registered">Registered</option>
+                                      <option value="attended">Attended</option>
+                                      <option value="absent">Absent</option>
+                                      <option value="cancelled">Cancelled</option>
+                                    </select>
+                                    {reg.status !== 'cancelled' && (
+                                      <button
+                                        onClick={() => handleRemoveParticipant(reg)}
+                                        className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
+                                      >
+                                        Remove
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
-                                <p className="text-sm text-gray-600 mt-1">{reg.userEmail} • {reg.userPhone}</p>
-                                {reg.isCaregiver && (
-                                  <p className="text-xs text-indigo-600 mt-1">👥 Caregiver: {reg.userName}</p>
-                                )}
-                                {reg.needsWheelchairAccess && <p className="text-xs text-blue-600 mt-1">♿ Needs wheelchair access</p>}
-                                {reg.hasCaregiverAccompanying && <p className="text-xs text-orange-600 mt-1">👥 Caregiver: {reg.caregiverName}</p>}
-                                {reg.dietaryRequirements && <p className="text-xs text-gray-500 mt-1">🍽️ {reg.dietaryRequirements}</p>}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <select
-                                  value={reg.status}
-                                  onChange={(e) => handleAttendanceUpdate(reg.id, e.target.value)}
-                                  disabled={reg.status === 'cancelled'}
-                                  className={`px-3 py-2 border rounded-lg text-sm font-medium ${
-                                    reg.status === 'attended' ? 'bg-green-100 border-green-300 text-green-800' :
-                                    reg.status === 'absent' ? 'bg-red-100 border-red-300 text-red-800' :
-                                    reg.status === 'cancelled' ? 'bg-red-100 border-red-300 text-red-800' :
-                                    'bg-gray-100 border-gray-300 text-gray-800'
-                                  }`}
-                                >
-                                  <option value="registered">Registered</option>
-                                  <option value="attended">Attended</option>
-                                  <option value="absent">Absent</option>
-                                  <option value="cancelled">Cancelled</option>
-                                </select>
-                                {reg.status !== 'cancelled' && (
-                                  <button
-                                    onClick={() => handleRemoveParticipant(reg)}
-                                    className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
-                                  >
-                                    Remove
-                                  </button>
-                                )}
-                              </div>
+                              ))}
                             </div>
-                          ))}
+                          )}
                         </div>
                       )}
-                    </>
-                  );
-                })()}
-
-                {/* Removal History Section */}
-                {removalHistory.length > 0 && (
-                  <div className="mt-8 pt-6 border-t border-gray-200">
-                    <h3 className="text-lg font-semibold text-gray-700 mb-4">Removal History</h3>
-                    <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-                      {removalHistory.map((removal: any, index: number) => {
-                        const displayName = removal.isCaregiver && removal.participantName 
-                          ? removal.participantName 
-                          : removal.userName;
-                        
-                        return (
-                          <div key={index} className="flex items-start justify-between bg-white p-4 rounded-lg border border-gray-200">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium text-gray-900">{displayName}</span>
-                                {removal.isCaregiver && (
-                                  <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">
-                                    👤 Caregiver
-                                  </span>
-                                )}
-                              </div>
-                              {removal.isCaregiver && removal.participantName && (
-                                <p className="text-sm text-gray-600 mt-1">👥 Caregiver: {removal.userName}</p>
-                              )}
-                              <p className="text-sm text-gray-600 mt-1">{removal.userEmail} • {removal.userPhone}</p>
-                              {removal.reason && (
-                                <p className="text-sm text-gray-600 mt-1"><span className="font-medium">Reason:</span> {removal.reason}</p>
-                              )}
-                            </div>
-                            <div className="text-right ml-4">
-                              <p className="text-sm text-gray-600">Removed by: <span className="font-medium">{removal.removedBy}</span></p>
-                              <p className="text-xs text-gray-500 mt-1">{new Date(removal.removedAt).toLocaleString()}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
                     </div>
-                  </div>
-                )}
-              </>
-            )}
+                  );
+                });
+              })()}
+            </div>
           </div>
         )}
 

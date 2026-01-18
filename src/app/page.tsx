@@ -335,13 +335,13 @@ export default function Home() {
           </div>
         ) : viewMode === 'calendar' ? (
           <Calendar 
-            events={events} 
+            events={events.filter(e => e.eventStatus !== 'past')} 
             onEventClick={handleEventClick}
             multiSelectMode={multiSelectMode}
             selectedEvents={selectedEvents}
           />
         ) : (
-          <EventList events={events} onEventClick={handleEventClick} />
+          <EventList events={events.filter(e => e.eventStatus !== 'past')} onEventClick={handleEventClick} />
         )}
       </div>
 

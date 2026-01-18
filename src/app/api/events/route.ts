@@ -30,6 +30,27 @@ async function getSheetId(sheets: ReturnType<typeof google.sheets>, spreadsheetI
   return sheet.properties.sheetId;
 }
 
+// Helper function to calculate event status based on current time
+function calculateEventStatus(date: string, endTime: string, startTime: string): 'ongoing' | 'past' {
+  if (!date) return 'ongoing';
+  
+  try {
+    const now = new Date();
+    // Use endTime if available, otherwise fall back to startTime
+    const timeToUse = endTime || startTime;
+    const eventEndDateTime = new Date(`${date}T${timeToUse}`);
+    
+    // If the date/time parsing failed, default to ongoing
+    if (isNaN(eventEndDateTime.getTime())) {
+      return 'ongoing';
+    }
+    
+    return now > eventEndDateTime ? 'past' : 'ongoing';
+  } catch {
+    return 'ongoing';
+  }
+}
+
 // GET /api/events - Fetch all events from Google Sheets
 export async function GET() {
   try {
@@ -37,34 +58,44 @@ export async function GET() {
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'Events!A2:U', // Extended range for confirmationMessage
+      range: 'Events!A2:V', // Extended range to include EventStatus column
     });
 
     const rows = response.data.values || [];
     
-    const events = rows.map((row) => ({
-      id: row[0] || '',
-      title: row[1] || '',
-      description: row[2] || '',
-      date: row[3] || '',
-      time: row[4] || '',
-      endTime: row[5] || '',
-      location: row[6] || '',
-      category: row[7] || '',
-      capacity: row[8] ? parseInt(row[8], 10) : undefined,
-      currentSignups: row[9] ? parseInt(row[9], 10) : 0,
-      wheelchairAccessible: row[10] === 'true',
-      caregiverRequired: row[11] === 'true',
-      caregiverPaymentRequired: row[12] === 'true',
-      caregiverPaymentAmount: row[13] ? parseFloat(row[13]) : undefined,
-      ageRestriction: row[14] || undefined,
-      skillLevel: row[15] || 'all',
-      volunteersNeeded: row[16] ? parseInt(row[16], 10) : 0,
-      currentVolunteers: row[17] ? parseInt(row[17], 10) : 0,
-      recurringGroupId: row[18] || undefined,
-      isRecurring: row[19] === 'true',
-      confirmationMessage: row[20] || undefined,
-    }));
+    const events = rows.map((row) => {
+      const date = row[3] || '';
+      const time = row[4] || '';
+      const endTime = row[5] || '';
+      
+      // Calculate event status server-side for accuracy (fallback from Google Sheets formula)
+      const eventStatus = calculateEventStatus(date, endTime, time);
+      
+      return {
+        id: row[0] || '',
+        title: row[1] || '',
+        description: row[2] || '',
+        date,
+        time,
+        endTime,
+        location: row[6] || '',
+        category: row[7] || '',
+        capacity: row[8] ? parseInt(row[8], 10) : undefined,
+        currentSignups: row[9] ? parseInt(row[9], 10) : 0,
+        wheelchairAccessible: row[10] === 'true',
+        caregiverRequired: row[11] === 'true',
+        caregiverPaymentRequired: row[12] === 'true',
+        caregiverPaymentAmount: row[13] ? parseFloat(row[13]) : undefined,
+        ageRestriction: row[14] || undefined,
+        skillLevel: row[15] || 'all',
+        volunteersNeeded: row[16] ? parseInt(row[16], 10) : 0,
+        currentVolunteers: row[17] ? parseInt(row[17], 10) : 0,
+        recurringGroupId: row[18] || undefined,
+        isRecurring: row[19] === 'true',
+        confirmationMessage: row[20] || undefined,
+        eventStatus, // Calculated server-side for real-time accuracy
+      };
+    });
 
     return NextResponse.json({ events });
   } catch (error) {

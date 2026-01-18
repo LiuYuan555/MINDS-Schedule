@@ -18,8 +18,6 @@ export default function MyEventsPage() {
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<'upcoming' | 'past' | 'all'>('upcoming');
   const [membershipType, setMembershipType] = useState<MembershipType>('adhoc');
-  const [showMembershipModal, setShowMembershipModal] = useState(false);
-  const [isUpdatingMembership, setIsUpdatingMembership] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -63,36 +61,6 @@ export default function MyEventsPage() {
       setMembershipType(data.membershipType || 'adhoc');
     } catch (error) {
       console.error('Error fetching membership:', error);
-    }
-  };
-
-  const handleMembershipChange = async (newType: MembershipType) => {
-    if (!user) return;
-    setIsUpdatingMembership(true);
-    try {
-      const response = await fetch('/api/user/membership', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
-          userName: user.fullName,
-          userEmail: user.emailAddresses[0]?.emailAddress,
-          membershipType: newType,
-        }),
-      });
-
-      if (response.ok) {
-        setMembershipType(newType);
-        setShowMembershipModal(false);
-        alert('Membership updated successfully!');
-      } else {
-        alert('Failed to update membership. Please try again.');
-      }
-    } catch (error) {
-      console.error('Error updating membership:', error);
-      alert('Failed to update membership. Please try again.');
-    } finally {
-      setIsUpdatingMembership(false);
     }
   };
 
@@ -204,12 +172,10 @@ export default function MyEventsPage() {
               <p className="text-blue-600 font-medium">{MEMBERSHIP_LABELS[membershipType]}</p>
               <p className="text-sm text-gray-500 mt-1">{membershipDescriptions[membershipType]}</p>
             </div>
-            <button
-              onClick={() => setShowMembershipModal(true)}
-              className="px-4 py-2 text-sm text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
-            >
-              Change Membership
-            </button>
+            <div className="text-right">
+              <p className="text-xs text-gray-400">To change your membership type,</p>
+              <p className="text-xs text-gray-400">please contact staff.</p>
+            </div>
           </div>
         </div>
 
@@ -382,39 +348,6 @@ export default function MyEventsPage() {
           </div>
         </div>
       </footer>
-
-      {/* Membership Change Modal */}
-      {showMembershipModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">Change Membership Type</h2>
-            <div className="space-y-3">
-              {(Object.keys(MEMBERSHIP_LABELS) as MembershipType[]).map((type) => (
-                <button
-                  key={type}
-                  onClick={() => handleMembershipChange(type)}
-                  disabled={isUpdatingMembership}
-                  className={`w-full p-4 text-left rounded-lg border transition-colors disabled:opacity-50 ${
-                    membershipType === type
-                      ? 'border-blue-600 bg-blue-50'
-                      : 'border-gray-200 hover:border-blue-300'
-                  }`}
-                >
-                  <p className="font-medium text-gray-800">{MEMBERSHIP_LABELS[type]}</p>
-                  <p className="text-sm text-gray-500">{membershipDescriptions[type]}</p>
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => setShowMembershipModal(false)}
-              disabled={isUpdatingMembership}
-              className="w-full mt-4 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

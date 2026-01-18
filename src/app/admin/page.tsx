@@ -13,6 +13,11 @@ type TabType = 'events' | 'attendance' | 'calendar' | 'users' | 'statistics';
 function StatisticsDashboard({ events, registrations }: { events: Event[]; registrations: Registration[] }) {
   const [selectedWeek, setSelectedWeek] = useState(0); // 0 = current week, -1 = last week, etc.
   
+  // Filter to only include past events for statistics
+  const pastEvents = events.filter(e => e.eventStatus === 'past');
+  const pastEventIds = new Set(pastEvents.map(e => e.id));
+  const pastRegistrations = registrations.filter(r => pastEventIds.has(r.eventId));
+  
   const today = new Date();
   
   // Calculate week ranges
@@ -25,17 +30,17 @@ function StatisticsDashboard({ events, registrations }: { events: Event[]; regis
   const currentWeek = getWeekRange(selectedWeek);
   const previousWeek = getWeekRange(selectedWeek - 1);
   
-  // Filter data by week
+  // Filter data by week (using only past events)
   const getWeekEvents = (weekRange: { start: Date; end: Date }) => {
-    return events.filter(e => {
+    return pastEvents.filter(e => {
       const eventDate = parseISO(e.date);
       return isWithinInterval(eventDate, weekRange);
     });
   };
   
   const getWeekRegistrations = (weekRange: { start: Date; end: Date }) => {
-    return registrations.filter(r => {
-      const event = events.find(e => e.id === r.eventId);
+    return pastRegistrations.filter(r => {
+      const event = pastEvents.find(e => e.id === r.eventId);
       if (!event) return false;
       const eventDate = parseISO(event.date);
       return isWithinInterval(eventDate, weekRange);
@@ -88,11 +93,10 @@ function StatisticsDashboard({ events, registrations }: { events: Event[]; regis
     return ((current - previous) / previous) * 100;
   };
   
-  // Top performing events (by fill rate)
-  const eventPerformance = events
-    .filter(e => new Date(e.date) <= today) // Only past events
+  // Top performing events (by fill rate) - using only past events
+  const eventPerformance = pastEvents
     .map(e => {
-      const eventRegs = registrations.filter(r => r.eventId === e.id);
+      const eventRegs = pastRegistrations.filter(r => r.eventId === e.id);
       const activeRegs = eventRegs.filter(r => r.status !== 'cancelled').length;
       const attended = eventRegs.filter(r => r.status === 'attended').length;
       const cancelled = eventRegs.filter(r => r.status === 'cancelled').length;
@@ -112,11 +116,11 @@ function StatisticsDashboard({ events, registrations }: { events: Event[]; regis
     })
     .sort((a, b) => b.fillRate - a.fillRate);
   
-  // Category performance
+  // Category performance (using only past events)
   const categoryStats = Object.keys(categoryColors).map(category => {
-    const catEvents = events.filter(e => e.category === category && new Date(e.date) <= today);
-    const catRegs = registrations.filter(r => {
-      const event = events.find(e => e.id === r.eventId);
+    const catEvents = pastEvents.filter(e => e.category === category);
+    const catRegs = pastRegistrations.filter(r => {
+      const event = pastEvents.find(e => e.id === r.eventId);
       return event?.category === category;
     });
     const activeRegs = catRegs.filter(r => r.status !== 'cancelled').length;
@@ -135,15 +139,15 @@ function StatisticsDashboard({ events, registrations }: { events: Event[]; regis
   
   // Inactive participants (registered but not attended in last 30 days)
   const thirtyDaysAgo = subWeeks(today, 4);
-  const recentEvents = events.filter(e => {
+  const recentEvents = pastEvents.filter(e => {
     const eventDate = parseISO(e.date);
     return eventDate >= thirtyDaysAgo && eventDate <= today;
   });
   
   const participantActivity = new Map<string, { name: string; email: string; lastAttended: Date | null; totalRegistrations: number; totalAttended: number }>();
   
-  registrations.forEach(r => {
-    const event = events.find(e => e.id === r.eventId);
+  pastRegistrations.forEach(r => {
+    const event = pastEvents.find(e => e.id === r.eventId);
     if (!event) return;
     
     const existing = participantActivity.get(r.userId) || {
@@ -181,7 +185,61 @@ function StatisticsDashboard({ events, registrations }: { events: Event[]; regis
       return a.lastAttended.getTime() - b.lastAttended.getTime();
     })
     .slice(0, 10);
-  
+
+  // Absent users - registered for past events but didn't attend (status is not 'attended' and not 'cancelled')
+  const absentUserData = new Map<string, { 
+    name: string; 
+    email: string; 
+    absentEvents: { eventId: string; eventTitle: string; eventDate: string }[];
+    totalRegistrations: number;
+    totalAbsent: number;
+  }>();
+
+  pastRegistrations.forEach(r => {
+    const event = pastEvents.find(e => e.id === r.eventId);
+    if (!event) return;
+    
+    // Only count non-cancelled registrations
+    if (r.status === 'cancelled') return;
+    
+    const existing = absentUserData.get(r.userId) || {
+      name: r.userName,
+      email: r.userEmail,
+      absentEvents: [],
+      totalRegistrations: 0,
+      totalAbsent: 0,
+    };
+    
+    existing.totalRegistrations++;
+    
+    // Track users with status explicitly marked as 'absent'
+    if (r.status === 'absent') {
+      existing.totalAbsent++;
+      existing.absentEvents.push({
+        eventId: event.id,
+        eventTitle: event.title,
+        eventDate: event.date,
+      });
+    }
+    
+    absentUserData.set(r.userId, existing);
+  });
+
+  // Users with at least one absence, sorted by absence rate then total absences
+  const absentUsers = Array.from(absentUserData.entries())
+    .filter(([_, data]) => data.totalAbsent > 0)
+    .map(([userId, data]) => ({
+      userId,
+      ...data,
+      absenceRate: data.totalRegistrations > 0 ? (data.totalAbsent / data.totalRegistrations) * 100 : 0,
+    }))
+    .sort((a, b) => {
+      // Sort by absence rate first, then by total absences
+      if (b.absenceRate !== a.absenceRate) return b.absenceRate - a.absenceRate;
+      return b.totalAbsent - a.totalAbsent;
+    })
+    .slice(0, 10);
+
   // Export function
   const exportToCSV = () => {
     const headers = ['Metric', 'This Week', 'Last Week', 'Change %'];
@@ -448,6 +506,71 @@ function StatisticsDashboard({ events, registrations }: { events: Event[]; regis
           </div>
         )}
       </div>
+
+      {/* Absent Users - Registered but didn't attend */}
+      <div className="bg-white rounded-xl p-6 shadow-sm">
+        <h3 className="font-semibold text-gray-800 mb-4">🚫 Absent Users (Registered but didn&apos;t attend)</h3>
+        {absentUsers.length === 0 ? (
+          <p className="text-gray-500 text-sm">No absences recorded for past events! 🎉</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-2 px-3 font-medium text-gray-600">Name</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-600">Email</th>
+                  <th className="text-center py-2 px-3 font-medium text-gray-600">Absences</th>
+                  <th className="text-center py-2 px-3 font-medium text-gray-600">Total Registrations</th>
+                  <th className="text-center py-2 px-3 font-medium text-gray-600">Absence Rate</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-600">Missed Events</th>
+                </tr>
+              </thead>
+              <tbody>
+                {absentUsers.map((u) => (
+                  <tr key={u.userId} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-2 px-3 font-medium text-gray-800">{u.name}</td>
+                    <td className="py-2 px-3 text-gray-600">{u.email}</td>
+                    <td className="py-2 px-3 text-center">
+                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-100 text-red-700 font-semibold text-xs">
+                        {u.totalAbsent}
+                      </span>
+                    </td>
+                    <td className="py-2 px-3 text-center">{u.totalRegistrations}</td>
+                    <td className="py-2 px-3 text-center">
+                      <span className={`font-medium ${
+                        u.absenceRate >= 75 ? 'text-red-600' :
+                        u.absenceRate >= 50 ? 'text-orange-600' :
+                        u.absenceRate >= 25 ? 'text-yellow-600' :
+                        'text-gray-600'
+                      }`}>
+                        {u.absenceRate.toFixed(0)}%
+                      </span>
+                    </td>
+                    <td className="py-2 px-3">
+                      <div className="flex flex-wrap gap-1 max-w-xs">
+                        {u.absentEvents.slice(0, 3).map((event, idx) => (
+                          <span 
+                            key={`${event.eventId}-${idx}`}
+                            className="inline-block px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded truncate max-w-[120px]"
+                            title={`${event.eventTitle} - ${format(parseISO(event.eventDate), 'MMM d, yyyy')}`}
+                          >
+                            {event.eventTitle}
+                          </span>
+                        ))}
+                        {u.absentEvents.length > 3 && (
+                          <span className="inline-block px-2 py-0.5 bg-gray-200 text-gray-500 text-xs rounded">
+                            +{u.absentEvents.length - 3} more
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -472,6 +595,7 @@ export default function AdminPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [calendarView, setCalendarView] = useState<'month' | 'week'>('month');
   const [hoveredEvent, setHoveredEvent] = useState<string | null>(null);
+  const [eventsFilter, setEventsFilter] = useState<'upcoming' | 'past'>('upcoming');
 
   useEffect(() => {
     const storedAuth = localStorage.getItem('adminAuthenticated');
@@ -700,7 +824,7 @@ export default function AdminPage() {
   const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
 
   const getEventsForDay = (day: Date) => {
-    return events.filter((event) => isSameDay(parseISO(event.date), day));
+    return events.filter((event) => event.eventStatus !== 'past' && isSameDay(parseISO(event.date), day));
   };
 
   if (isCheckingAuth) {
@@ -989,8 +1113,31 @@ export default function AdminPage() {
         {/* Events Tab */}
         {activeTab === 'events' && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-800">All Events ({events.length})</h2>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="flex bg-gray-100 rounded-lg p-1">
+                  <button
+                    onClick={() => setEventsFilter('upcoming')}
+                    className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                      eventsFilter === 'upcoming'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                  >
+                    Upcoming ({events.filter(e => e.eventStatus !== 'past').length})
+                  </button>
+                  <button
+                    onClick={() => setEventsFilter('past')}
+                    className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                      eventsFilter === 'past'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                  >
+                    Past ({events.filter(e => e.eventStatus === 'past').length})
+                  </button>
+                </div>
+              </div>
               <button
                 onClick={() => {
                   setEditingEvent(null);
@@ -1011,19 +1158,22 @@ export default function AdminPage() {
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
                 <p className="text-gray-500 mt-2">Loading events...</p>
               </div>
-            ) : events.length === 0 ? (
+            ) : events.filter(e => eventsFilter === 'upcoming' ? e.eventStatus !== 'past' : e.eventStatus === 'past').length === 0 ? (
               <div className="bg-white rounded-xl p-12 text-center">
                 <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
                 </div>
-                <p className="text-gray-500">No events found. Create your first event!</p>
+                <p className="text-gray-500">{eventsFilter === 'upcoming' ? 'No upcoming events found. Create your first event!' : 'No past events found.'}</p>
               </div>
             ) : (
               <div className="grid gap-4">
                 {events
-                  .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                  .filter(e => eventsFilter === 'upcoming' ? e.eventStatus !== 'past' : e.eventStatus === 'past')
+                  .sort((a, b) => eventsFilter === 'upcoming' 
+                    ? new Date(a.date).getTime() - new Date(b.date).getTime()
+                    : new Date(b.date).getTime() - new Date(a.date).getTime())
                   .map((event) => {
                     const regs = getEventRegistrations(event.id).filter(r => r.status !== 'cancelled');
                     const isPast = new Date(event.date) < new Date();
@@ -1141,6 +1291,7 @@ export default function AdminPage() {
               >
                 <option value="">-- Select an event --</option>
                 {events
+                  .filter(e => e.eventStatus !== 'past')
                   .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
                   .map((event) => (
                     <option key={event.id} value={event.id}>

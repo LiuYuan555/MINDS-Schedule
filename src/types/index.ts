@@ -1,3 +1,5 @@
+export type EventStatus = 'ongoing' | 'past';
+
 export interface Event {
   id: string;
   title: string;
@@ -25,6 +27,8 @@ export interface Event {
   isRecurring?: boolean;
   // SMS confirmation message
   confirmationMessage?: string; // Custom SMS message sent after registration
+  // Event status - automatically calculated from end time
+  eventStatus?: EventStatus; // 'ongoing' or 'past' based on current time vs end time
 }
 
 export interface SignUpData {

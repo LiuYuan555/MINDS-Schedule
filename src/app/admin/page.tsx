@@ -697,7 +697,7 @@ export default function AdminPage() {
     }
   };
 
-  const fetchRemovalHistory = async (eventId?: string) => {
+  const fetchRemovalHistory = async (eventId?: string): Promise<any[]> => {
     try {
       const url = eventId 
         ? `/api/registrations/history?eventId=${eventId}`
@@ -705,15 +705,14 @@ export default function AdminPage() {
       const response = await fetch(url);
       
       if (!response.ok) {
-        setRemovalHistory([]);
-        return;
+        return [];
       }
       
       const data = await response.json();
-      setRemovalHistory(Array.isArray(data) ? data : []);
+      return Array.isArray(data) ? data : [];
     } catch (error) {
       console.error('Error fetching removal history:', error);
-      setRemovalHistory([]);
+      return [];
     }
   };
 

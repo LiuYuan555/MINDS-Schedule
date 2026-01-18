@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { NextRequest, NextResponse } from 'next/server';
+import { sendConfirmationSMS, formatConfirmationMessage, getDefaultMessageTemplate } from '@/lib/sms';
 
 async function getGoogleSheetsClient() {
   const credentials = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
@@ -107,7 +108,7 @@ export async function POST(request: NextRequest) {
     // Get event details to check capacity
     const eventsResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'Events!A:R',
+      range: 'Events!A:U',
     });
 
     const eventRows = eventsResponse.data.values || [];
@@ -116,6 +117,12 @@ export async function POST(request: NextRequest) {
     if (!eventRow) {
       return NextResponse.json({ error: 'Event not found' }, { status: 404 });
     }
+
+    // Extract event details for SMS
+    const eventDate = eventRow[3];
+    const eventTime = eventRow[4];
+    const eventLocation = eventRow[6];
+    const confirmationMessage = eventRow[20] && eventRow[20] !== 'Nil' ? eventRow[20] : undefined;
 
     // Check capacity based on registration type
     if (registrationType === 'participant') {
@@ -330,6 +337,22 @@ export async function POST(request: NextRequest) {
           requestBody: { values: [[currentVolunteers + 1]] },
         });
       }
+    }
+
+    // Send confirmation SMS
+    if (userPhone) {
+      const template = confirmationMessage || getDefaultMessageTemplate();
+      const smsMessage = formatConfirmationMessage(template, {
+        userName,
+        eventTitle,
+        eventDate,
+        eventTime,
+        eventLocation,
+      });
+      // Fire and forget - don't block registration on SMS
+      sendConfirmationSMS(userPhone, smsMessage).catch(err => {
+        console.error('SMS sending failed:', err);
+      });
     }
 
     return NextResponse.json({

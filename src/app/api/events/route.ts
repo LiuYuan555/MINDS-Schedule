@@ -37,7 +37,7 @@ export async function GET() {
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'Events!A2:T', // Extended range for recurring fields
+      range: 'Events!A2:U', // Extended range for confirmationMessage
     });
 
     const rows = response.data.values || [];
@@ -63,6 +63,7 @@ export async function GET() {
       currentVolunteers: row[17] ? parseInt(row[17], 10) : 0,
       recurringGroupId: row[18] || undefined,
       isRecurring: row[19] === 'true',
+      confirmationMessage: row[20] || undefined,
     }));
 
     return NextResponse.json({ events });
@@ -81,7 +82,7 @@ export async function POST(request: NextRequest) {
     const { 
       title, description, date, time, endTime, location, category, capacity,
       wheelchairAccessible, caregiverRequired, caregiverPaymentRequired, caregiverPaymentAmount,
-      volunteersNeeded, skillLevel, ageRestriction, isRecurring, recurringDates
+      volunteersNeeded, skillLevel, ageRestriction, isRecurring, recurringDates, confirmationMessage
     } = body;
 
     if (!title || !description || !date || !time || !location || !category) {
@@ -123,6 +124,7 @@ export async function POST(request: NextRequest) {
           currentVolunteers: 0,
           recurringGroupId,
           isRecurring: true,
+          confirmationMessage: confirmationMessage || undefined,
         };
         
         events.push(event);
@@ -148,6 +150,7 @@ export async function POST(request: NextRequest) {
           0, // currentVolunteers
           recurringGroupId, // column S
           'true', // isRecurring - column T
+          confirmationMessage || 'Nil', // column U
         ];
         
         rowsData.push(rowData);
@@ -156,7 +159,7 @@ export async function POST(request: NextRequest) {
       // Append all rows at once
       await sheets.spreadsheets.values.append({
         spreadsheetId,
-        range: 'Events!A:T',
+        range: 'Events!A:U',
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: rowsData,
@@ -192,11 +195,12 @@ export async function POST(request: NextRequest) {
         0, // currentVolunteers starts at 0
         '', // recurringGroupId
         'false', // isRecurring
+        confirmationMessage || 'Nil', // column U
       ];
 
       await sheets.spreadsheets.values.append({
         spreadsheetId,
-        range: 'Events!A:T',
+        range: 'Events!A:U',
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [rowData],
@@ -296,7 +300,7 @@ export async function PUT(request: NextRequest) {
     const { 
       id, title, description, date, time, endTime, location, category, capacity,
       wheelchairAccessible, caregiverRequired, caregiverPaymentRequired, caregiverPaymentAmount,
-      volunteersNeeded, skillLevel, ageRestriction
+      volunteersNeeded, skillLevel, ageRestriction, confirmationMessage
     } = body;
 
     if (!id || !title || !description || !date || !time || !location || !category) {
@@ -327,7 +331,7 @@ export async function PUT(request: NextRequest) {
     // Get current signups and volunteers count to preserve them
     const currentDataResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `Events!J${rowIndex + 1}:T${rowIndex + 1}`,
+      range: `Events!J${rowIndex + 1}:U${rowIndex + 1}`,
     });
     const currentData = currentDataResponse.data.values?.[0] || [];
     const currentSignups = currentData[0] || 0;
@@ -336,7 +340,7 @@ export async function PUT(request: NextRequest) {
     const isRecurringStr = currentData[10] || 'false';
 
     // Update the row (rowIndex + 1 because sheets are 1-indexed)
-    // Column order: ID | Title | Description | Date | Time | EndTime | Location | Category | Capacity | CurrentSignups | WheelchairAccessible | CaregiverRequired | CaregiverPaymentRequired | CaregiverPaymentAmount | AgeRestriction | SkillLevel | VolunteersNeeded | CurrentVolunteers | RecurringGroupId | IsRecurring
+    // Column order: ID | Title | Description | Date | Time | EndTime | Location | Category | Capacity | CurrentSignups | WheelchairAccessible | CaregiverRequired | CaregiverPaymentRequired | CaregiverPaymentAmount | AgeRestriction | SkillLevel | VolunteersNeeded | CurrentVolunteers | RecurringGroupId | IsRecurring | ConfirmationMessage
     const rowData = [
       id,
       title,
@@ -358,11 +362,12 @@ export async function PUT(request: NextRequest) {
       currentVolunteers,
       recurringGroupId,
       isRecurringStr,
+      confirmationMessage || 'Nil',
     ];
 
     await sheets.spreadsheets.values.update({
       spreadsheetId,
-      range: `Events!A${rowIndex + 1}:T${rowIndex + 1}`,
+      range: `Events!A${rowIndex + 1}:U${rowIndex + 1}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [rowData],

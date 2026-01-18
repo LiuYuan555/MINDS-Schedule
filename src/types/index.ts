@@ -23,6 +23,8 @@ export interface Event {
   // Recurring event fields
   recurringGroupId?: string; // Links recurring events together
   isRecurring?: boolean;
+  // SMS confirmation message
+  confirmationMessage?: string; // Custom SMS message sent after registration
 }
 
 export interface SignUpData {

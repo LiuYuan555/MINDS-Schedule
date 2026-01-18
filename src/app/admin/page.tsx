@@ -3,12 +3,454 @@
 import { useState, useEffect } from 'react';
 import { Event, Registration } from '@/types';
 import { categoryColors } from '@/data/events';
-import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, startOfWeek, endOfWeek, addMonths, subMonths, isToday, isSameMonth } from 'date-fns';
+import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, startOfWeek, endOfWeek, addMonths, subMonths, isToday, isSameMonth, subWeeks, isWithinInterval, differenceInDays } from 'date-fns';
 import WaitlistManager from '@/components/WaitlistManager';
 import EventFormModal from '@/components/EventFormModal';
 import UserManagement from '@/components/UserManagement';
 
-type TabType = 'events' | 'attendance' | 'calendar' | 'users';
+type TabType = 'events' | 'attendance' | 'calendar' | 'users' | 'statistics';
+
+function StatisticsDashboard({ events, registrations }: { events: Event[]; registrations: Registration[] }) {
+  const [selectedWeek, setSelectedWeek] = useState(0); // 0 = current week, -1 = last week, etc.
+  
+  const today = new Date();
+  
+  // Calculate week ranges
+  const getWeekRange = (weeksAgo: number) => {
+    const start = startOfWeek(subWeeks(today, -weeksAgo), { weekStartsOn: 1 });
+    const end = endOfWeek(subWeeks(today, -weeksAgo), { weekStartsOn: 1 });
+    return { start, end };
+  };
+  
+  const currentWeek = getWeekRange(selectedWeek);
+  const previousWeek = getWeekRange(selectedWeek - 1);
+  
+  // Filter data by week
+  const getWeekEvents = (weekRange: { start: Date; end: Date }) => {
+    return events.filter(e => {
+      const eventDate = parseISO(e.date);
+      return isWithinInterval(eventDate, weekRange);
+    });
+  };
+  
+  const getWeekRegistrations = (weekRange: { start: Date; end: Date }) => {
+    return registrations.filter(r => {
+      const event = events.find(e => e.id === r.eventId);
+      if (!event) return false;
+      const eventDate = parseISO(event.date);
+      return isWithinInterval(eventDate, weekRange);
+    });
+  };
+  
+  const currentWeekEvents = getWeekEvents(currentWeek);
+  const previousWeekEvents = getWeekEvents(previousWeek);
+  const currentWeekRegs = getWeekRegistrations(currentWeek);
+  const previousWeekRegs = getWeekRegistrations(previousWeek);
+  
+  // Calculate metrics
+  const calculateMetrics = (weekEvents: Event[], weekRegs: Registration[]) => {
+    const totalEvents = weekEvents.length;
+    const totalRegistrations = weekRegs.filter(r => r.status !== 'cancelled').length;
+    const attended = weekRegs.filter(r => r.status === 'attended').length;
+    const cancelled = weekRegs.filter(r => r.status === 'cancelled').length;
+    const totalCapacity = weekEvents.reduce((sum, e) => sum + (e.capacity || 0), 0);
+    
+    const attendanceRate = totalRegistrations > 0 ? (attended / totalRegistrations) * 100 : 0;
+    const cancellationRate = (totalRegistrations + cancelled) > 0 ? (cancelled / (totalRegistrations + cancelled)) * 100 : 0;
+    const fillRate = totalCapacity > 0 ? (totalRegistrations / totalCapacity) * 100 : 0;
+    
+    const participants = weekRegs.filter(r => r.registrationType === 'participant' && r.status !== 'cancelled').length;
+    const volunteers = weekRegs.filter(r => r.registrationType === 'volunteer' && r.status !== 'cancelled').length;
+    const caregiverRegistrations = weekRegs.filter(r => r.isCaregiver && r.status !== 'cancelled').length;
+    const selfRegistrations = weekRegs.filter(r => !r.isCaregiver && r.status !== 'cancelled').length;
+    
+    return {
+      totalEvents,
+      totalRegistrations,
+      attended,
+      cancelled,
+      attendanceRate,
+      cancellationRate,
+      fillRate,
+      participants,
+      volunteers,
+      caregiverRegistrations,
+      selfRegistrations,
+    };
+  };
+  
+  const currentMetrics = calculateMetrics(currentWeekEvents, currentWeekRegs);
+  const previousMetrics = calculateMetrics(previousWeekEvents, previousWeekRegs);
+  
+  // Calculate change percentages
+  const getChange = (current: number, previous: number) => {
+    if (previous === 0) return current > 0 ? 100 : 0;
+    return ((current - previous) / previous) * 100;
+  };
+  
+  // Top performing events (by fill rate)
+  const eventPerformance = events
+    .filter(e => new Date(e.date) <= today) // Only past events
+    .map(e => {
+      const eventRegs = registrations.filter(r => r.eventId === e.id);
+      const activeRegs = eventRegs.filter(r => r.status !== 'cancelled').length;
+      const attended = eventRegs.filter(r => r.status === 'attended').length;
+      const cancelled = eventRegs.filter(r => r.status === 'cancelled').length;
+      const fillRate = e.capacity ? (activeRegs / e.capacity) * 100 : 0;
+      const attendanceRate = activeRegs > 0 ? (attended / activeRegs) * 100 : 0;
+      const cancellationRate = (activeRegs + cancelled) > 0 ? (cancelled / (activeRegs + cancelled)) * 100 : 0;
+      
+      return {
+        ...e,
+        activeRegs,
+        attended,
+        cancelled,
+        fillRate,
+        attendanceRate,
+        cancellationRate,
+      };
+    })
+    .sort((a, b) => b.fillRate - a.fillRate);
+  
+  // Category performance
+  const categoryStats = Object.keys(categoryColors).map(category => {
+    const catEvents = events.filter(e => e.category === category && new Date(e.date) <= today);
+    const catRegs = registrations.filter(r => {
+      const event = events.find(e => e.id === r.eventId);
+      return event?.category === category;
+    });
+    const activeRegs = catRegs.filter(r => r.status !== 'cancelled').length;
+    const attended = catRegs.filter(r => r.status === 'attended').length;
+    const totalCapacity = catEvents.reduce((sum, e) => sum + (e.capacity || 0), 0);
+    
+    return {
+      category,
+      eventCount: catEvents.length,
+      registrations: activeRegs,
+      attended,
+      fillRate: totalCapacity > 0 ? (activeRegs / totalCapacity) * 100 : 0,
+      attendanceRate: activeRegs > 0 ? (attended / activeRegs) * 100 : 0,
+    };
+  }).filter(c => c.eventCount > 0).sort((a, b) => b.fillRate - a.fillRate);
+  
+  // Inactive participants (registered but not attended in last 30 days)
+  const thirtyDaysAgo = subWeeks(today, 4);
+  const recentEvents = events.filter(e => {
+    const eventDate = parseISO(e.date);
+    return eventDate >= thirtyDaysAgo && eventDate <= today;
+  });
+  
+  const participantActivity = new Map<string, { name: string; email: string; lastAttended: Date | null; totalRegistrations: number; totalAttended: number }>();
+  
+  registrations.forEach(r => {
+    const event = events.find(e => e.id === r.eventId);
+    if (!event) return;
+    
+    const existing = participantActivity.get(r.userId) || {
+      name: r.userName,
+      email: r.userEmail,
+      lastAttended: null,
+      totalRegistrations: 0,
+      totalAttended: 0,
+    };
+    
+    if (r.status !== 'cancelled') {
+      existing.totalRegistrations++;
+    }
+    
+    if (r.status === 'attended') {
+      existing.totalAttended++;
+      const eventDate = parseISO(event.date);
+      if (!existing.lastAttended || eventDate > existing.lastAttended) {
+        existing.lastAttended = eventDate;
+      }
+    }
+    
+    participantActivity.set(r.userId, existing);
+  });
+  
+  const inactiveParticipants = Array.from(participantActivity.entries())
+    .filter(([_, data]) => {
+      if (!data.lastAttended) return data.totalRegistrations > 0;
+      return differenceInDays(today, data.lastAttended) > 30;
+    })
+    .map(([userId, data]) => ({ userId, ...data }))
+    .sort((a, b) => {
+      if (!a.lastAttended) return -1;
+      if (!b.lastAttended) return 1;
+      return a.lastAttended.getTime() - b.lastAttended.getTime();
+    })
+    .slice(0, 10);
+  
+  // Export function
+  const exportToCSV = () => {
+    const headers = ['Metric', 'This Week', 'Last Week', 'Change %'];
+    const rows = [
+      ['Total Events', currentMetrics.totalEvents, previousMetrics.totalEvents, getChange(currentMetrics.totalEvents, previousMetrics.totalEvents).toFixed(1)],
+      ['Total Registrations', currentMetrics.totalRegistrations, previousMetrics.totalRegistrations, getChange(currentMetrics.totalRegistrations, previousMetrics.totalRegistrations).toFixed(1)],
+      ['Attendance Rate %', currentMetrics.attendanceRate.toFixed(1), previousMetrics.attendanceRate.toFixed(1), (currentMetrics.attendanceRate - previousMetrics.attendanceRate).toFixed(1)],
+      ['Cancellation Rate %', currentMetrics.cancellationRate.toFixed(1), previousMetrics.cancellationRate.toFixed(1), (currentMetrics.cancellationRate - previousMetrics.cancellationRate).toFixed(1)],
+      ['Fill Rate %', currentMetrics.fillRate.toFixed(1), previousMetrics.fillRate.toFixed(1), (currentMetrics.fillRate - previousMetrics.fillRate).toFixed(1)],
+      ['Participants', currentMetrics.participants, previousMetrics.participants, getChange(currentMetrics.participants, previousMetrics.participants).toFixed(1)],
+      ['Volunteers', currentMetrics.volunteers, previousMetrics.volunteers, getChange(currentMetrics.volunteers, previousMetrics.volunteers).toFixed(1)],
+      ['Caregiver Registrations', currentMetrics.caregiverRegistrations, previousMetrics.caregiverRegistrations, getChange(currentMetrics.caregiverRegistrations, previousMetrics.caregiverRegistrations).toFixed(1)],
+      ['Self Registrations', currentMetrics.selfRegistrations, previousMetrics.selfRegistrations, getChange(currentMetrics.selfRegistrations, previousMetrics.selfRegistrations).toFixed(1)],
+    ];
+    
+    const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `minds-statistics-${format(today, 'yyyy-MM-dd')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  
+  const StatCard = ({ title, value, previousValue, suffix = '', invertColors = false }: { title: string; value: number; previousValue: number; suffix?: string; invertColors?: boolean }) => {
+    const change = value - previousValue;
+    const isPositive = invertColors ? change < 0 : change > 0;
+    const isNegative = invertColors ? change > 0 : change < 0;
+    
+    return (
+      <div className="bg-white rounded-xl p-4 shadow-sm">
+        <p className="text-sm text-gray-500 mb-1">{title}</p>
+        <p className="text-2xl font-bold text-gray-800">{typeof value === 'number' && value % 1 !== 0 ? value.toFixed(1) : value}{suffix}</p>
+        <div className={`text-xs mt-1 flex items-center gap-1 ${isPositive ? 'text-green-600' : isNegative ? 'text-red-600' : 'text-gray-500'}`}>
+          {change !== 0 && (
+            <>
+              {isPositive ? '↑' : '↓'}
+              {Math.abs(change).toFixed(1)}{suffix}
+            </>
+          )}
+          {change === 0 && '→ No change'}
+          <span className="text-gray-400 ml-1">vs last week</span>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-gray-800">📊 Statistics Dashboard</h2>
+          <p className="text-sm text-gray-500">
+            Week of {format(currentWeek.start, 'MMM d')} - {format(currentWeek.end, 'MMM d, yyyy')}
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setSelectedWeek(w => w - 1)}
+              className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-800 rounded-md"
+            >
+              ← Prev
+            </button>
+            <button
+              onClick={() => setSelectedWeek(0)}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md ${selectedWeek === 0 ? 'bg-white shadow-sm text-blue-600' : 'text-gray-600'}`}
+            >
+              This Week
+            </button>
+            <button
+              onClick={() => setSelectedWeek(w => w + 1)}
+              disabled={selectedWeek >= 0}
+              className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-800 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next →
+            </button>
+          </div>
+          <button
+            onClick={exportToCSV}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Export CSV
+          </button>
+        </div>
+      </div>
+
+      {/* Key Metrics */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <StatCard title="Total Events" value={currentMetrics.totalEvents} previousValue={previousMetrics.totalEvents} />
+        <StatCard title="Registrations" value={currentMetrics.totalRegistrations} previousValue={previousMetrics.totalRegistrations} />
+        <StatCard title="Attendance Rate" value={currentMetrics.attendanceRate} previousValue={previousMetrics.attendanceRate} suffix="%" />
+        <StatCard title="Cancellation Rate" value={currentMetrics.cancellationRate} previousValue={previousMetrics.cancellationRate} suffix="%" invertColors />
+        <StatCard title="Fill Rate" value={currentMetrics.fillRate} previousValue={previousMetrics.fillRate} suffix="%" />
+      </div>
+
+      {/* Participant Breakdown */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white rounded-xl p-6 shadow-sm">
+          <h3 className="font-semibold text-gray-800 mb-4">👥 Registration Types</h3>
+          <div className="space-y-4">
+            <div>
+              <div className="flex justify-between text-sm mb-1">
+                <span className="text-gray-600">Participants</span>
+                <span className="font-medium text-gray-800">{currentMetrics.participants}</span>
+              </div>
+              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-blue-500 rounded-full transition-all"
+                  style={{ width: `${currentMetrics.totalRegistrations > 0 ? (currentMetrics.participants / currentMetrics.totalRegistrations) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+            <div>
+              <div className="flex justify-between text-sm mb-1">
+                <span className="text-gray-600">Volunteers</span>
+                <span className="font-medium text-gray-800">{currentMetrics.volunteers}</span>
+              </div>
+              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-green-500 rounded-full transition-all"
+                  style={{ width: `${currentMetrics.totalRegistrations > 0 ? (currentMetrics.volunteers / currentMetrics.totalRegistrations) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl p-6 shadow-sm">
+          <h3 className="font-semibold text-gray-800 mb-4">🤝 Caregiver vs Self-Registered</h3>
+          <div className="space-y-4">
+            <div>
+              <div className="flex justify-between text-sm mb-1">
+                <span className="text-gray-600">Self-Registered</span>
+                <span className="font-medium text-gray-800">{currentMetrics.selfRegistrations}</span>
+              </div>
+              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-purple-500 rounded-full transition-all"
+                  style={{ width: `${currentMetrics.totalRegistrations > 0 ? (currentMetrics.selfRegistrations / currentMetrics.totalRegistrations) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+            <div>
+              <div className="flex justify-between text-sm mb-1">
+                <span className="text-gray-600">Caregiver-Registered</span>
+                <span className="font-medium text-gray-800">{currentMetrics.caregiverRegistrations}</span>
+              </div>
+              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-orange-500 rounded-full transition-all"
+                  style={{ width: `${currentMetrics.totalRegistrations > 0 ? (currentMetrics.caregiverRegistrations / currentMetrics.totalRegistrations) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Top Events & Categories */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Top Events */}
+        <div className="bg-white rounded-xl p-6 shadow-sm">
+          <h3 className="font-semibold text-gray-800 mb-4">🏆 Top Events by Fill Rate</h3>
+          {eventPerformance.length === 0 ? (
+            <p className="text-gray-500 text-sm">No past events yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {eventPerformance.slice(0, 5).map((event, idx) => (
+                <div key={event.id} className="flex items-center gap-3">
+                  <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${
+                    idx === 0 ? 'bg-yellow-100 text-yellow-700' :
+                    idx === 1 ? 'bg-gray-100 text-gray-700' :
+                    idx === 2 ? 'bg-orange-100 text-orange-700' :
+                    'bg-gray-50 text-gray-500'
+                  }`}>
+                    {idx + 1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-800 truncate">{event.title}</p>
+                    <p className="text-xs text-gray-500">{format(parseISO(event.date), 'MMM d')} • {event.activeRegs}/{event.capacity || '∞'}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-blue-600">{event.fillRate.toFixed(0)}%</p>
+                    <p className="text-xs text-gray-500">fill rate</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Category Performance */}
+        <div className="bg-white rounded-xl p-6 shadow-sm">
+          <h3 className="font-semibold text-gray-800 mb-4">📁 Category Performance</h3>
+          {categoryStats.length === 0 ? (
+            <p className="text-gray-500 text-sm">No category data yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {categoryStats.slice(0, 5).map((cat) => (
+                <div key={cat.category} className="flex items-center gap-3">
+                  <span className={`px-2 py-1 text-xs rounded-full ${categoryColors[cat.category]}`}>
+                    {cat.category}
+                  </span>
+                  <div className="flex-1">
+                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-blue-500 rounded-full"
+                        style={{ width: `${Math.min(cat.fillRate, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="text-right w-20">
+                    <p className="font-semibold text-gray-800">{cat.fillRate.toFixed(0)}%</p>
+                    <p className="text-xs text-gray-500">{cat.eventCount} events</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Inactive Participants */}
+      <div className="bg-white rounded-xl p-6 shadow-sm">
+        <h3 className="font-semibold text-gray-800 mb-4">⚠️ Participants to Re-engage (No attendance in 30+ days)</h3>
+        {inactiveParticipants.length === 0 ? (
+          <p className="text-gray-500 text-sm">All participants are active! 🎉</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-2 px-3 font-medium text-gray-600">Name</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-600">Email</th>
+                  <th className="text-center py-2 px-3 font-medium text-gray-600">Total Registrations</th>
+                  <th className="text-center py-2 px-3 font-medium text-gray-600">Total Attended</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-600">Last Attended</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inactiveParticipants.map((p) => (
+                  <tr key={p.userId} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-2 px-3 font-medium text-gray-800">{p.name}</td>
+                    <td className="py-2 px-3 text-gray-600">{p.email}</td>
+                    <td className="py-2 px-3 text-center">{p.totalRegistrations}</td>
+                    <td className="py-2 px-3 text-center">{p.totalAttended}</td>
+                    <td className="py-2 px-3">
+                      {p.lastAttended ? (
+                        <span className="text-red-600">{format(p.lastAttended, 'MMM d, yyyy')} ({differenceInDays(today, p.lastAttended)} days ago)</span>
+                      ) : (
+                        <span className="text-orange-600">Never attended</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -324,7 +766,7 @@ export default function AdminPage() {
             <div className="flex items-center gap-4">
               <h1 className="text-xl font-bold text-gray-800">MINDS Admin</h1>
               <div className="hidden sm:flex items-center bg-gray-100 rounded-lg p-1">
-                {(['calendar', 'events', 'attendance', 'users'] as TabType[]).map((tab) => (
+                {(['calendar', 'events', 'attendance', 'statistics', 'users'] as TabType[]).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
@@ -337,6 +779,7 @@ export default function AdminPage() {
                     {tab === 'calendar' && '📅 Calendar'}
                     {tab === 'events' && '📋 Events'}
                     {tab === 'attendance' && '✓ Attendance'}
+                    {tab === 'statistics' && '📊 Statistics'}
                     {tab === 'users' && '👤 Users'}
                   </button>
                 ))}
@@ -354,7 +797,7 @@ export default function AdminPage() {
           
           {/* Mobile tabs */}
           <div className="sm:hidden pb-3 flex gap-2 overflow-x-auto">
-            {(['calendar', 'events', 'attendance', 'users'] as TabType[]).map((tab) => (
+            {(['calendar', 'events', 'attendance', 'statistics', 'users'] as TabType[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -367,6 +810,7 @@ export default function AdminPage() {
                 {tab === 'calendar' && '📅'}
                 {tab === 'events' && '📋'}
                 {tab === 'attendance' && '✓'}
+                {tab === 'statistics' && '📊'}
                 {tab === 'users' && '👤'}
                 <span className="ml-1">{tab.charAt(0).toUpperCase() + tab.slice(1)}</span>
               </button>
@@ -854,6 +1298,11 @@ export default function AdminPage() {
               </>
             )}
           </div>
+        )}
+
+        {/* Statistics Tab */}
+        {activeTab === 'statistics' && (
+          <StatisticsDashboard events={events} registrations={registrations} />
         )}
 
         {/* Users Tab */}

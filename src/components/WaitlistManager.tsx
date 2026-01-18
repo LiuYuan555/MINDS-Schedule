@@ -27,6 +27,18 @@ export default function WaitlistManager({ event, onClose, onRefresh }: WaitlistM
       : registration.userName;
   };
 
+  // Helper function to safely format dates
+  const formatDate = (dateString: string | undefined): string => {
+    if (!dateString) return 'N/A';
+    try {
+      const date = parseISO(dateString);
+      if (isNaN(date.getTime())) return 'N/A';
+      return format(date, 'MMM d, yyyy h:mm a');
+    } catch {
+      return 'N/A';
+    }
+  };
+
   useEffect(() => {
     fetchRegistrations();
   }, [event.id]);
@@ -113,7 +125,9 @@ export default function WaitlistManager({ event, onClose, onRefresh }: WaitlistM
       });
 
       if (!response.ok) {
-        throw new Error('Failed to cancel registration');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Cancel registration error:', errorData);
+        throw new Error(errorData.error || 'Failed to cancel registration');
       }
 
       await fetchRegistrations();
@@ -271,7 +285,7 @@ export default function WaitlistManager({ event, onClose, onRefresh }: WaitlistM
                       <div className="font-medium text-gray-900">{getDisplayName(reg)}</div>
                       <div className="text-sm text-gray-500">{reg.userEmail} • {reg.userPhone}</div>
                       <div className="text-xs text-gray-400 mt-1">
-                        Registered: {format(parseISO(reg.registeredAt), 'MMM d, yyyy h:mm a')}
+                        Registered: {formatDate(reg.registeredAt)}
                       </div>
                     </div>
                     <button
@@ -316,7 +330,7 @@ export default function WaitlistManager({ event, onClose, onRefresh }: WaitlistM
                         <div className="font-medium text-gray-900">{getDisplayName(reg)}</div>
                         <div className="text-sm text-gray-600">{reg.userEmail} • {reg.userPhone}</div>
                         <div className="text-xs text-gray-500 mt-1">
-                          Joined waitlist: {format(parseISO(reg.registeredAt), 'MMM d, yyyy h:mm a')}
+                          Joined waitlist: {formatDate(reg.registeredAt)}
                         </div>
                       </div>
                     </div>
@@ -351,7 +365,7 @@ export default function WaitlistManager({ event, onClose, onRefresh }: WaitlistM
                       <div className="font-medium text-gray-900">{getDisplayName(reg)}</div>
                       <div className="text-sm text-gray-500">{reg.userEmail} • {reg.userPhone}</div>
                       <div className="text-xs text-gray-400 mt-1">
-                        Requested: {format(parseISO(reg.registeredAt), 'MMM d, yyyy h:mm a')}
+                        Requested: {formatDate(reg.registeredAt)}
                       </div>
                     </div>
                     <div className="flex gap-2">

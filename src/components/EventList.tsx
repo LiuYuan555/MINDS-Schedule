@@ -97,6 +97,11 @@ export default function EventList({ events, onEventClick }: EventListProps) {
                           </span>
                         </div>
                       )}
+                      {event.capacity && event.currentSignups && event.currentSignups >= event.capacity && (
+                        <span className="inline-flex items-center gap-1 text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full font-medium">
+                          ⚠️ Full - Waitlist available
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>

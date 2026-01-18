@@ -129,8 +129,10 @@ export async function POST(request: NextRequest) {
     if (registrationType === 'participant') {
       const capacity = eventRow[8] ? parseInt(eventRow[8], 10) : null;
       const currentSignups = eventRow[9] ? parseInt(eventRow[9], 10) : 0;
+      var isWaitlist = false;
       if (capacity !== null && currentSignups >= capacity) {
-        return NextResponse.json({ error: 'Event is full' }, { status: 400 });
+        // Allow registration, but mark as waitlist
+        isWaitlist = true;
       }
     } else if (registrationType === 'volunteer') {
       const volunteersNeeded = eventRow[16] ? parseInt(eventRow[16], 10) : null;
@@ -285,6 +287,17 @@ export async function POST(request: NextRequest) {
     const registrationId = `reg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     const registeredAt = new Date().toISOString();
 
+    // If waitlist, set status to 'waitlist', else 'registered'
+    const regStatus = isWaitlist ? 'waitlist' : 'registered';
+
+    // If waitlist, set waitlist position (count of current waitlist entries + 1)
+    let waitlistPosition = '';
+    if (isWaitlist) {
+      // Count current waitlist entries for this event
+      const waitlistRegs = rows.filter(row => row[1] === eventId && row[8] === 'waitlist');
+      waitlistPosition = (waitlistRegs.length + 1).toString();
+    }
+
     const rowData = [
       registrationId,
       eventId,
@@ -294,7 +307,7 @@ export async function POST(request: NextRequest) {
       userEmail,
       userPhone || '',
       registrationType,
-      'registered',
+      regStatus,
       dietaryRequirements || '',
       specialNeeds || '',
       needsWheelchairAccess ? 'true' : 'false',
@@ -302,7 +315,7 @@ export async function POST(request: NextRequest) {
       caregiverName || '',
       caregiverPhone || '',
       registeredAt,
-      '', // waitlistPosition (column Q)
+      waitlistPosition, // waitlistPosition (column Q)
       '', // promotedAt (column R)
       isCaregiver ? 'true' : 'false', // isCaregiver (column S)
       participantName || '', // participantName (column T)
@@ -319,8 +332,8 @@ export async function POST(request: NextRequest) {
     const eventRowIndex = eventRows.findIndex((row) => row[0] === eventId);
 
     if (eventRowIndex !== -1) {
-      if (registrationType === 'participant') {
-        // Update currentSignups (column J, index 9)
+      if (registrationType === 'participant' && !isWaitlist) {
+        // Update currentSignups (column J, index 9) only if not waitlist
         const currentSignups = parseInt(eventRows[eventRowIndex][9] || '0', 10);
         await sheets.spreadsheets.values.update({
           spreadsheetId,

@@ -122,6 +122,8 @@ export const translations = {
     waitlistNoticeText: { en: "This event has reached capacity. By submitting this form, you'll submit a waitlist request. Staff will review requests and add selected participants to the waitlist. You'll be contacted if approved and when a spot becomes available.", zh: '此活动已达容量上限。提交此表格即为申请候补。工作人员将审核申请并将选定的参与者添加到候补名单。如获批准或有名额空出，我们将与您联系。' },
     waitlistRequests: { en: 'There are currently', zh: '目前有' },
     waitlistRequestsSuffix: { en: 'waitlist requests.', zh: '个候补申请。' },
+    eventFullBanner: { en: '⚠️ This event is full', zh: '⚠️ 此活动已满' },
+    registeringForWaitlist: { en: 'Registering will add you to the waitlist', zh: '报名将把您加入候补名单' },
     
     // Form fields
     iAmCaregiver: { en: 'I am a caregiver registering on behalf of someone under my care', zh: '我是护理人员，代表我照顾的人报名' },

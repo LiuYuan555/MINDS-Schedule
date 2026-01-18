@@ -105,6 +105,7 @@ export default function Calendar({ events, onEventClick, multiSelectMode = false
             <div className="mt-1 space-y-1">
               {dayEvents.slice(0, 2).map((event) => {
                 const isSelected = selectedEvents.some(e => e.id === event.id);
+                const isEventFull = event.capacity && event.currentSignups && event.currentSignups >= event.capacity;
                 return (
                   <button
                     key={event.id}
@@ -120,6 +121,7 @@ export default function Calendar({ events, onEventClick, multiSelectMode = false
                     }`}
                   >
                     {multiSelectMode && isSelected && <span className="mr-1">✓</span>}
+                    {isEventFull && <span className="mr-1" title="Event is full - Waitlist available">⚠️</span>}
                     {event.isRecurring && <span className="mr-1">🔄</span>}
                     {event.title}
                   </button>

@@ -1,6 +1,7 @@
 import { google } from 'googleapis';
 import { NextRequest, NextResponse } from 'next/server';
 import { sendConfirmationSMS, formatConfirmationMessage, getDefaultMessageTemplate } from '@/lib/sms';
+import { sendConfirmationEmail } from '@/lib/email';
 
 async function getGoogleSheetsClient() {
   const credentials = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
@@ -339,7 +340,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Send confirmation SMS
+    // Send confirmation SMS and Email
     if (userPhone) {
       const template = confirmationMessage || getDefaultMessageTemplate();
       const smsMessage = formatConfirmationMessage(template, {
@@ -352,6 +353,20 @@ export async function POST(request: NextRequest) {
       // Fire and forget - don't block registration on SMS
       sendConfirmationSMS(userPhone, smsMessage).catch(err => {
         console.error('SMS sending failed:', err);
+      });
+    }
+
+    // Send confirmation email
+    if (userEmail) {
+      sendConfirmationEmail(userEmail, {
+        userName,
+        eventTitle,
+        eventDate,
+        eventTime,
+        eventLocation,
+        customMessage: confirmationMessage,
+      }).catch(err => {
+        console.error('Email sending failed:', err);
       });
     }
 

@@ -1,70 +1,71 @@
-# SMS Notification Setup Guide
+# SMS & Email Notification Setup Guide
 
-This guide explains how to set up SMS confirmation messages for event registrations using Twilio.
+This guide explains how to set up SMS and Email confirmation messages for event registrations.
 
-## Cost Estimate
-- **Twilio SMS to Singapore:** ~$0.0579/message
-- **Monthly cost (1000 messages):** ~$58/month
-- **Twilio Phone Number:** ~$1-2/month (US number)
-- **Total:** ~$60/month
+## Cost Summary
+| Service | Free Tier | Monthly Cost (1000 msgs) |
+|---------|-----------|--------------------------|
+| **Twilio SMS** | Trial only | ~$58 |
+| **Resend Email** | 3,000/month | $0 |
 
-## Setup Steps
+---
 
-### 1. Create a Twilio Account
-1. Go to [https://www.twilio.com/try-twilio](https://www.twilio.com/try-twilio)
-2. Sign up for a free account (includes trial credits)
-3. Verify your email and phone number
+## SMS Setup (Twilio)
 
-### 2. Get Your Twilio Credentials
-1. Go to the [Twilio Console](https://console.twilio.com/)
-2. Find your **Account SID** and **Auth Token** on the dashboard
-3. Copy these values
+### 1. Create Twilio Account
+1. Go to [twilio.com/try-twilio](https://www.twilio.com/try-twilio)
+2. Sign up and verify your email/phone
 
-### 3. Get a Phone Number
+### 2. Get Credentials
+1. Go to [Twilio Console](https://console.twilio.com/)
+2. Copy your **Account SID** and **Auth Token**
 
-**Option A: US Number (Recommended - Always Available)**
-1. In Twilio Console, go to **Phone Numbers** → **Buy a number**
-2. Select a US number (e.g., +1 area code)
-3. Purchase the number (~$1.15/month)
-4. US numbers can send international SMS to Singapore
+### 3. Buy a Phone Number
+1. Go to **Phone Numbers** → **Buy a number**
+2. Buy a **US number** (~$1.15/month) - works for sending to Singapore
 
-**Option B: Alphanumeric Sender ID (Best for Branding)**
-- Singapore numbers are rarely available on Twilio
-- If needed, contact Twilio Sales for a dedicated Singapore number
-- Alternatively, use a US number - recipients will see the US number but SMS will still be delivered
+### 4. Upgrade Account (Required for Production)
+- Trial accounts can only send to verified numbers
+- Click **Upgrade** in Twilio Console to send to any number
 
-**Option C: Alphanumeric Sender ID (Best for Branding)**
-1. Instead of a phone number, use "MINDS" as the sender
-2. Go to **Messaging** → **Services** → **Create Messaging Service**
-3. Enable "Alphanumeric Sender ID"
-4. Set sender as `MINDS` (max 11 characters)
-5. Note: Recipients cannot reply to alphanumeric senders
-
-> ⚠️ **Important:** For alphanumeric sender IDs to Singapore, you may need to register with SGNIC. See [Twilio's Singapore regulations](https://www.twilio.com/docs/sms/guidelines-and-regulations/singapore-sms-guidelines).
-
-### 4. Add Environment Variables
-Add the following to your `.env.local` file:
-
+### 5. Add to `.env.local`
 ```bash
-# Twilio SMS Configuration
-TWILIO_ACCOUNT_SID=your_account_sid_here
-TWILIO_AUTH_TOKEN=your_auth_token_here
-TWILIO_PHONE_NUMBER=+1xxxxxxxxxx  # US number works fine for Singapore
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_PHONE_NUMBER=+14342786800
 ```
 
-For alphanumeric sender ID:
+---
+
+## Email Setup (Resend)
+
+### 1. Create Resend Account
+1. Go to [resend.com](https://resend.com)
+2. Sign up with email
+
+### 2. Get API Key
+1. Go to **API Keys** in dashboard
+2. Create a new API key
+3. Copy the key (starts with `re_`)
+
+### 3. Add to `.env.local`
 ```bash
-TWILIO_PHONE_NUMBER=MINDS
+RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-### 5. Test the Setup
-1. Create a new event with a custom confirmation message
-2. Register for the event with a valid Singapore phone number
-3. Check if SMS is received
+### 4. (Optional) Custom Domain
+For production, verify your domain to send from your own email:
+```bash
+FROM_EMAIL=notifications@minds.org.sg
+```
+
+Without a verified domain, emails are sent from `onboarding@resend.dev` (works for testing).
+
+---
 
 ## Message Template Placeholders
 
-When creating events, admins can customize the SMS confirmation message using these placeholders:
+Both SMS and Email use the same placeholders:
 
 | Placeholder | Description | Example |
 |-------------|-------------|---------|
@@ -74,54 +75,41 @@ When creating events, admins can customize the SMS confirmation message using th
 | `{time}` | Event start time | 09:00 |
 | `{location}` | Event location | MINDS Centre |
 
-### Default Message Template
+### Default Message
 ```
 Hi {name}! You're confirmed for "{event}" on {date} at {time}. Location: {location}. See you there! - MINDS Singapore
 ```
 
-### Example Custom Message
-```
-Dear {name}, thank you for signing up for {event}! We look forward to seeing you on {date} at {time}. Please arrive 15 minutes early at {location}. - MINDS Singapore
-```
+---
+
+## Google Sheets Column
+
+Add column **U** with header `ConfirmationMessage` to your Events sheet.
+
+---
+
+## Testing
+
+1. Create an event with a custom confirmation message
+2. Register for the event
+3. Check your phone for SMS and email inbox for confirmation
+
+---
 
 ## Troubleshooting
 
-### SMS Not Sending
-1. Check that all environment variables are set correctly
-2. Verify your Twilio account has sufficient credits
-3. Ensure the phone number format is correct (8 digits for Singapore)
-4. Check the server logs for error messages
+### SMS not received
+- **Trial account**: Only verified numbers receive SMS - upgrade to paid
+- Check phone number format (8 digits for Singapore)
 
-### Invalid Phone Number
-The system automatically formats Singapore phone numbers:
-- `91234567` → `+6591234567`
-- `6591234567` → `+6591234567`
-- `+6591234567` → `+6591234567`
+### Email not received
+- Check spam folder
+- Verify `RESEND_API_KEY` is correct
+- Without domain verification, emails come from `onboarding@resend.dev`
 
-### Trial Account Limitations
-On a Twilio trial account:
-- You can only send SMS to verified phone numbers
-- Messages include a "Sent from a Twilio trial account" prefix
-- Upgrade to a paid account to remove these limitations
+---
 
-## Google Sheets Column Update
+## Non-Profit Discounts
 
-A new column **U (ConfirmationMessage)** has been added to the Events sheet. If you have an existing sheet, add this column header:
-
-| Column | Header |
-|--------|--------|
-| U | ConfirmationMessage |
-
-## Non-Profit Discount
-
-Twilio offers discounts for non-profit organizations. Apply at:
-[https://www.twilio.org/](https://www.twilio.org/)
-
-This could reduce your costs by up to 25%.
-
-## Alternative: Lower-Cost Options
-
-If Twilio costs are too high, consider these alternatives:
-
-| Service | Cost per SMS (SG) | Notes |
-|---------|-------------------|-------|
+- **Twilio**: Apply at [twilio.org](https://www.twilio.org/) for up to 25% off
+- **Resend**: Contact support for non-profit pricing

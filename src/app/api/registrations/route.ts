@@ -126,10 +126,10 @@ export async function POST(request: NextRequest) {
     const confirmationMessage = eventRow[20] && eventRow[20] !== 'Nil' ? eventRow[20] : undefined;
 
     // Check capacity based on registration type
+    let isWaitlist = false;
     if (registrationType === 'participant') {
       const capacity = eventRow[8] ? parseInt(eventRow[8], 10) : null;
       const currentSignups = eventRow[9] ? parseInt(eventRow[9], 10) : 0;
-      var isWaitlist = false;
       if (capacity !== null && currentSignups >= capacity) {
         // Allow registration, but mark as waitlist
         isWaitlist = true;

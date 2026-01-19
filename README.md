@@ -1,3 +1,7 @@
+# Hack4Good 2026 MINDS Problem Statement:
+
+How might we reduce friction in activity sign-ups for both individuals and caregivers, while reducing manual effort for staff in managing and consolidating registration data?
+
 # MINDS Singapore Event Scheduling Platform
 
 A modern, accessible event scheduling and registration platform built for MINDS Singapore (Movement for the Intellectually Disabled of Singapore). This platform enables participants to browse and register for events, volunteers to sign up for helping opportunities, and staff to manage events and track attendance.

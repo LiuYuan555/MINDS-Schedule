@@ -1,152 +1,143 @@
-# Google Sheets Template Setup
+# Google Sheets Template
 
-Use this as a reference when setting up your Google Sheets database.
+Reference for setting up your Google Sheets database.
 
 ## Sheet 1: Events
 
-Create a sheet named **Events** with these column headers in Row 1:
+| Column | Header | Example |
+|--------|--------|---------|
+| A | id | evt_abc123 |
+| B | title | Art Workshop |
+| C | description | Learn watercolor painting |
+| D | date | 2026-01-20 |
+| E | time | 10:00 AM |
+| F | endTime | 12:00 PM |
+| G | location | MINDS Training Centre |
+| H | category | Arts |
+| I | capacity | 15 |
+| J | currentSignups | 10 |
+| K | currentWaitlist | 2 |
+| L | wheelchairAccessible | true |
+| M | caregiverRequired | false |
+| N | caregiverPaymentRequired | false |
+| O | caregiverPaymentAmount | 20 |
+| P | ageRestriction | 18+ |
+| Q | skillLevel | beginner |
+| R | volunteersNeeded | 3 |
+| S | currentVolunteers | 1 |
+| T | recurringGroupId | group_123 |
+| U | isRecurring | true |
+| V | confirmationMessage | Hi {name}! See you at {event}! |
 
-| Column | Header | Description | Example |
-|--------|--------|-------------|---------|
-| A | id | Unique event ID | evt_abc123 |
-| B | title | Event name | Art Workshop |
-| C | description | Event details | Learn watercolor painting |
-| D | date | ISO date | 2026-01-20 |
-| E | time | Start time | 10:00 AM |
-| F | endTime | End time | 12:00 PM |
-| G | location | Venue | MINDS Training Centre |
-| H | category | Event category | Arts |
-| I | capacity | Max participants | 15 |
-| J | currentSignups | Current registrations | 10 |
-| K | currentWaitlist | Current on waitlist | 2 |
-| L | wheelchairAccessible | true/false | true |
-| M | caregiverRequired | true/false | false |
-| N | caregiverPaymentRequired | true/false | false |
-| O | caregiverPaymentAmount | Amount in dollars | 20 |
-| P | ageRestriction | Age requirements | 18+ |
-| Q | skillLevel | all/beginner/intermediate/advanced | beginner |
-| R | volunteersNeeded | Number needed | 3 |
-| S | currentVolunteers | Current volunteers | 1 |
-| T | recurringGroupId | Recurring event group | group_123 |
-| U | isRecurring | true/false | true |
+**Categories:** Sports, Arts, Education, Social, Health, Technology, Volunteer, Workshop, Outdoor Activity, Fitness, Life Skills, Support Group, Festive, Employment
 
-**Categories:** Sports, Arts, Education, Social, Health, Technology, Volunteer
+**Skill Levels:** all, beginner, intermediate, advanced
 
 ## Sheet 2: Registrations
 
-Create a sheet named **Registrations** with these column headers in Row 1:
+| Column | Header | Example |
+|--------|--------|---------|
+| A | id | reg_abc123 |
+| B | eventId | evt_abc123 |
+| C | eventTitle | Art Workshop |
+| D | userId | user_abc123 |
+| E | userName | John Smith |
+| F | userEmail | john@example.com |
+| G | userPhone | +65 9123 4567 |
+| H | registrationType | participant |
+| I | status | registered |
+| J | dietaryRequirements | Vegetarian |
+| K | specialNeeds | None |
+| L | needsWheelchairAccess | false |
+| M | hasCaregiverAccompanying | true |
+| N | caregiverName | Jane Smith |
+| O | caregiverPhone | +65 9876 5432 |
+| P | registeredAt | 2026-01-15T14:30:00Z |
+| Q | waitlistPosition | 1 |
+| R | promotedAt | 2026-01-16T10:00:00Z |
+| S | isCaregiver | false |
+| T | participantName | |
 
-| Column | Header | Description | Example |
-|--------|--------|-------------|---------|
-| A | id | Unique registration ID | reg_abc123 |
-| B | eventId | Event ID | evt_abc123 |
-| C | eventTitle | Event name | Art Workshop |
-| D | userId | User ID from Clerk | user_abc123 |
-| E | userName | Participant name | John Smith |
-| F | userEmail | Email address | john@example.com |
-| G | userPhone | Phone number | +65 9123 4567 |
-| H | registrationType | participant/volunteer | participant |
-| I | status | registered/waitlist/rejected/cancelled/attended/absent | registered |
-| J | dietaryRequirements | Food restrictions | Vegetarian |
-| K | specialNeeds | Accessibility needs | None |
-| L | needsWheelchairAccess | true/false | false |
-| M | hasCaregiverAccompanying | true/false | true |
-| N | caregiverName | Caregiver's name | Jane Smith |
-| O | caregiverPhone | Caregiver's phone | +65 9876 5432 |
-| P | registeredAt | ISO timestamp | 2026-01-15T14:30:00Z |
-| Q | waitlistPosition | Position in queue | 1 |
-| R | promotedAt | Promotion timestamp | 2026-01-16T10:00:00Z |
+**Registration Types:** participant, volunteer
 
 **Status Values:**
-- `registered` - Confirmed registration
-- `waitlist` - On waitlist (with waitlistPosition) or pending request (no waitlistPosition)
+- `registered` - Confirmed
+- `waitlist` - On waitlist (with position) or pending request (no position)
 - `rejected` - Waitlist request denied
-- `cancelled` - Registration cancelled
-- `attended` - Marked as attended
-- `absent` - Marked as absent
+- `cancelled` - Cancelled
+- `attended` - Marked attended
+- `absent` - Marked absent
 
 ## Sheet 3: Users
 
-Create a sheet named **Users** with these column headers in Row 1:
+| Column | Header | Example |
+|--------|--------|---------|
+| A | id | user_abc123 |
+| B | name | John Smith |
+| C | email | john@example.com |
+| D | phone | +65 9123 4567 |
+| E | role | participant |
+| F | status | active |
+| G | membershipType | once_weekly |
+| H | isCaregiver | false |
+| I | participantName | |
+| J | createdAt | 2026-01-15T10:00:00Z |
+| K | approvedAt | 2026-01-15T12:00:00Z |
+| L | approvedBy | admin@minds.org |
+| M | lastUpdatedAt | 2026-01-15T12:00:00Z |
+| N | lastUpdatedBy | admin@minds.org |
 
-| Column | Header | Description | Example |
-|--------|--------|-------------|---------|
-| A | id | User ID from Clerk | user_abc123 |
-| B | name | Full name | John Smith |
-| C | email | Email address | john@example.com |
-| D | phone | Phone number | +65 9123 4567 |
-| E | role | participant/volunteer/staff | participant |
-| F | createdAt | ISO timestamp | 2026-01-15T10:00:00Z |
-| G | membershipType | adhoc/once_weekly/twice_weekly/three_plus_weekly | once_weekly |
-| H | skills | Volunteer skills | First Aid, Teaching |
+**Roles:** participant, volunteer, staff
+
+**Status:** pending, active, restricted
 
 **Membership Types:**
-- `adhoc` - Ad-hoc engagement (no weekly limit)
-- `once_weekly` - Can register for 1 event per week
-- `twice_weekly` - Can register for 2 events per week
-- `three_plus_weekly` - Can register for 3+ events per week (no limit)
+- `adhoc` - No weekly limit
+- `once_weekly` - 1 event per week
+- `twice_weekly` - 2 events per week
+- `three_plus_weekly` - No limit
 
-**User Roles:**
-- `participant` - Regular participant
-- `volunteer` - Event volunteer
-- `staff` - MINDS staff member
+## Sheet 4: RemovalHistory (Optional)
 
-## Quick Setup Steps
+| Column | Header |
+|--------|--------|
+| A | id |
+| B | originalRegistrationId |
+| C | eventId |
+| D | eventTitle |
+| E | userId |
+| F | userName |
+| G | userEmail |
+| H | userPhone |
+| I | registrationType |
+| J | isCaregiver |
+| K | participantName |
+| L | removedBy |
+| M | reason |
+| N | removedAt |
 
-1. **Create Google Cloud Project**
-   - Go to https://console.cloud.google.com/
-   - Create new project: "MINDS Schedule"
+## Quick Copy-Paste Headers
 
-2. **Enable Google Sheets API**
-   - APIs & Services → Library
-   - Search "Google Sheets API" → Enable
-
-3. **Create Service Account**
-   - APIs & Services → Credentials
-   - Create Credentials → Service Account
-   - Name: `minds-schedule-service`
-   - Create & download JSON key
-
-4. **Create Google Sheet**
-   - Go to https://sheets.google.com
-   - Create new spreadsheet: "MINDS Events Database"
-   - Create three sheets: "Events", "Registrations", and "Users"
-   - Copy the column headers from tables above
-
-5. **Share Sheet with Service Account**
-   - Click Share button
-   - Add service account email (from JSON file)
-   - Give "Editor" permission
-   - Uncheck "Notify people"
-
-6. **Get Spreadsheet ID**
-   - From URL: `https://docs.google.com/spreadsheets/d/[SPREADSHEET_ID]/edit`
-   - Copy the ID between `/d/` and `/edit`
-
-7. **Configure Environment Variables**
-   - Open `.env.local` in your project
-   - Replace `GOOGLE_SERVICE_ACCOUNT_KEY` with entire JSON content (one line)
-   - Replace `GOOGLE_SPREADSHEET_ID` with your spreadsheet ID
-
-8. **Restart Dev Server**
-   ```bash
-   # Stop current server (Ctrl+C)
-   npm run dev
-   ```
-
-9. **Test the Integration**
-   - Go to http://localhost:3000
-   - Sign up for an event
-   - Check your Google Sheet - registration should appear!
-
-## Example Data
-
-### Sample Event Row
+**Events (Row 1):**
 ```
-evt_001 | Basketball Training | Learn basketball basics | 2026-01-25 | 2:00 PM | 4:00 PM | MINDS Sports Hall | Sports | 20 | 0 | 0 | true | false | false | | 12+ | beginner | 2 | 0 | | false
+id	title	description	date	time	endTime	location	category	capacity	currentSignups	currentWaitlist	wheelchairAccessible	caregiverRequired	caregiverPaymentRequired	caregiverPaymentAmount	ageRestriction	skillLevel	volunteersNeeded	currentVolunteers	recurringGroupId	isRecurring	confirmationMessage
 ```
 
-### Sample Registration Row
+**Registrations (Row 1):**
+```
+id	eventId	eventTitle	userId	userName	userEmail	userPhone	registrationType	status	dietaryRequirements	specialNeeds	needsWheelchairAccess	hasCaregiverAccompanying	caregiverName	caregiverPhone	registeredAt	waitlistPosition	promotedAt	isCaregiver	participantName
+```
+
+**Users (Row 1):**
+```
+id	name	email	phone	role	status	membershipType	isCaregiver	participantName	createdAt	approvedAt	approvedBy	lastUpdatedAt	lastUpdatedBy
+```
+
+**RemovalHistory (Row 1):**
+```
+id	originalRegistrationId	eventId	eventTitle	userId	userName	userEmail	userPhone	registrationType	isCaregiver	participantName	removedBy	reason	removedAt
+```
+
 ```
 reg_001 | evt_001 | Basketball Training | user_abc123 | John Doe | john@example.com | +65 9123 4567 | participant | registered | None | None | false | false | | | 2026-01-15T10:00:00Z | |
 ```

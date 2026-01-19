@@ -1,152 +1,123 @@
-# Google Sheets Quick Setup Guide
+# Quick Setup Guide
 
-## 🚀 Quick Start (5-10 minutes)
+Get the MINDS Schedule app running in 10 minutes.
 
-### Step 1: Create Google Cloud Project (2 minutes)
+## Prerequisites
 
-1. Go to https://console.cloud.google.com/
-2. Click "Select a project" → "New Project"
-3. Name: **MINDS Schedule**
-4. Click "Create"
+- Node.js 18+
+- Google account
+- Clerk account (for authentication)
 
-### Step 2: Enable Google Sheets API (1 minute)
+## Step 1: Install Dependencies
 
-1. In Google Cloud Console: **APIs & Services** → **Library**
-2. Search: **Google Sheets API**
-3. Click **Enable**
+```bash
+npm install
+```
 
-### Step 3: Create Service Account & Download Key (2 minutes)
+## Step 2: Set Up Clerk Authentication
 
-1. **APIs & Services** → **Credentials**
+1. Go to [clerk.com](https://clerk.com) and create an account
+2. Create a new application
+3. Copy your API keys
+
+## Step 3: Set Up Google Sheets
+
+### Create Google Cloud Project
+1. Go to [console.cloud.google.com](https://console.cloud.google.com/)
+2. Create new project: **MINDS Schedule**
+3. Enable **Google Sheets API** (APIs & Services → Library)
+
+### Create Service Account
+1. Go to **APIs & Services** → **Credentials**
 2. **Create Credentials** → **Service Account**
 3. Name: `minds-schedule-service`
-4. Click **Create and Continue** → **Done**
-5. Click on the service account email in the list
-6. Go to **Keys** tab
-7. **Add Key** → **Create new key** → **JSON**
-8. Download the JSON file (KEEP IT SAFE!)
+4. Go to **Keys** tab → **Add Key** → **JSON**
+5. Download the JSON file (keep it safe!)
 
-### Step 4: Create Your Google Sheet (2 minutes)
+### Create Google Sheet
+1. Go to [sheets.google.com](https://sheets.google.com)
+2. Create new spreadsheet: **MINDS Events Database**
+3. Create these sheets with headers:
 
-1. Go to https://sheets.google.com
-2. Create new spreadsheet
-3. Name it: **MINDS Events Database**
-
-#### Create Sheet 1: "Events"
-- Rename "Sheet1" to **Events** (exact spelling, capital E)
-- Copy-paste this header row into Row 1:
-
+**Sheet: Events**
 ```
-id	title	description	date	time	endTime	location	category	capacity	currentSignups	currentWaitlist	wheelchairAccessible	caregiverRequired	caregiverPaymentRequired	caregiverPaymentAmount	ageRestriction	skillLevel	volunteersNeeded	currentVolunteers	recurringGroupId	isRecurring
+id	title	description	date	time	endTime	location	category	capacity	currentSignups	currentWaitlist	wheelchairAccessible	caregiverRequired	caregiverPaymentRequired	caregiverPaymentAmount	ageRestriction	skillLevel	volunteersNeeded	currentVolunteers	recurringGroupId	isRecurring	confirmationMessage
 ```
 
-#### Create Sheet 2: "Registrations"
-- Click + to add new sheet
-- Name it **Registrations** (exact spelling, capital R)
-- Copy-paste this header row into Row 1:
-
+**Sheet: Registrations**
 ```
-id	eventId	eventTitle	userId	userName	userEmail	userPhone	registrationType	status	dietaryRequirements	specialNeeds	needsWheelchairAccess	hasCaregiverAccompanying	caregiverName	caregiverPhone	registeredAt	waitlistPosition	promotedAt
+id	eventId	eventTitle	userId	userName	userEmail	userPhone	registrationType	status	dietaryRequirements	specialNeeds	needsWheelchairAccess	hasCaregiverAccompanying	caregiverName	caregiverPhone	registeredAt	waitlistPosition	promotedAt	isCaregiver	participantName
 ```
 
-### Step 5: Share Sheet with Service Account (1 minute)
-
-1. Click **Share** button (top-right)
-2. Open the JSON file you downloaded
-3. Find `"client_email"` - copy that email address
-4. Paste email in Share dialog
-5. Change permission to **Editor**
-6. **UNCHECK** "Notify people"
-7. Click **Share**
-
-### Step 6: Get Spreadsheet ID (30 seconds)
-
-Look at your browser URL:
+**Sheet: Users**
 ```
-https://docs.google.com/spreadsheets/d/1A2B3C4D5E6F7G8H9I0J/edit
-                                          ↑
-                                   Copy this part
+id	name	email	phone	role	status	membershipType	isCaregiver	participantName	createdAt	approvedAt	approvedBy	lastUpdatedAt	lastUpdatedBy
 ```
 
-Copy the ID between `/d/` and `/edit`
+### Share Sheet
+1. Click **Share** button
+2. Add service account email (from JSON file's `client_email`)
+3. Give **Editor** permission
+4. Uncheck "Notify people"
 
-### Step 7: Configure .env.local (2 minutes)
+### Get Spreadsheet ID
+From URL: `https://docs.google.com/spreadsheets/d/[SPREADSHEET_ID]/edit`
 
-Open `.env.local` in VS Code and update these two lines:
+## Step 4: Configure Environment
 
-#### For GOOGLE_SERVICE_ACCOUNT_KEY:
-1. Open the JSON file you downloaded
-2. **Select ALL content** (Cmd+A)
-3. Copy it (Cmd+C)
-4. Paste it into `.env.local` replacing everything between the single quotes
+Create `.env.local`:
 
-Should look like:
-```env
-GOOGLE_SERVICE_ACCOUNT_KEY='{"type":"service_account","project_id":"minds-schedule-123","private_key_id":"abc123...","private_key":"-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----\n","client_email":"minds-schedule@minds-schedule-123.iam.gserviceaccount.com",...}'
-```
-
-#### For GOOGLE_SPREADSHEET_ID:
-Replace with the ID you copied in Step 6:
-```env
-GOOGLE_SPREADSHEET_ID=1A2B3C4D5E6F7G8H9I0J
-```
-
-### Step 8: Restart Server (30 seconds)
-
-In your terminal:
 ```bash
-# Stop current server (press Ctrl+C)
-# Then restart:
+# Clerk Authentication
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_...
+CLERK_SECRET_KEY=sk_...
+
+# Google Sheets
+GOOGLE_SERVICE_ACCOUNT_KEY='{"type":"service_account",...}'  # Paste entire JSON
+GOOGLE_SPREADSHEET_ID=your_spreadsheet_id
+
+# Admin Panel
+ADMIN_PASSWORD=your_secure_password
+
+# Optional: Email (Resend)
+RESEND_API_KEY=re_...
+
+# Optional: SMS (Twilio)
+TWILIO_ACCOUNT_SID=AC...
+TWILIO_AUTH_TOKEN=...
+TWILIO_PHONE_NUMBER=+1...
+```
+
+## Step 5: Run the App
+
+```bash
 npm run dev
 ```
 
-### Step 9: Test It! (1 minute)
+Open [http://localhost:3000](http://localhost:3000)
 
-1. Go to http://localhost:3000
-2. Sign in (or create account)
-3. Click on an event
-4. Fill out the registration form
-5. Submit
-6. **Check your Google Sheet** - the registration should appear! 🎉
+## Verification Checklist
 
----
+- [ ] Homepage loads with calendar
+- [ ] Can sign in with Clerk
+- [ ] Can register for an event
+- [ ] Registration appears in Google Sheet
+- [ ] Admin panel works at `/admin`
 
-## ✅ Verification Checklist
+## Troubleshooting
 
-- [ ] Google Cloud Project created
-- [ ] Google Sheets API enabled
-- [ ] Service Account created
-- [ ] JSON key downloaded
-- [ ] Google Spreadsheet created with "Events" and "Registrations" sheets
-- [ ] Column headers added to both sheets
-- [ ] Sheet shared with service account email (Editor permission)
-- [ ] Spreadsheet ID copied
-- [ ] `.env.local` updated with JSON key
-- [ ] `.env.local` updated with Spreadsheet ID
-- [ ] Dev server restarted
-- [ ] Test registration created
-- [ ] Data appears in Google Sheet
+**"Google Sheets not configured"**
+- Check both Google env variables are set
+- Restart dev server
 
----
+**"The caller does not have permission"**
+- Share sheet with service account email
+- Ensure Editor permission
 
-## 🎯 Common Issues & Fixes
-
-### Issue: "Google Sheets not configured"
-**Fix:** 
-- Check `.env.local` has both variables filled in
-- Restart dev server (Ctrl+C, then `npm run dev`)
-
-### Issue: "The caller does not have permission"
-**Fix:**
-- Share the Google Sheet with service account email
-- Make sure permission is **Editor**, not Viewer
-- Check email in JSON matches email in Share dialog
-
-### Issue: "Unable to parse range: 'Events'"
-**Fix:**
+**"Unable to parse range: 'Events'"**
 - Sheet must be named exactly **Events** (capital E)
-- Same for **Registrations** (capital R)
-- Check for typos or extra spaces
+- Same for **Registrations** and **Users**
+
 
 ### Issue: "Invalid JSON in environment variable"
 **Fix:**

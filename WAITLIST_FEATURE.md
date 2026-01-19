@@ -1,152 +1,60 @@
-# Waitlist Feature Documentation
+# Waitlist Feature
 
 ## Overview
-The waitlist feature automatically manages event capacity overflow by allowing users to join a waitlist when an event is full. Staff can then promote waitlist members when spots become available.
 
-## User Experience
+The waitlist system manages event capacity overflow. When an event is full, users can request to join the waitlist. Staff review and approve requests, then promote waitlist members when spots become available.
 
-### For Participants
+## For Participants
 
-#### Registering for a Full Event:
-1. When viewing an event that's at capacity, users see:
-   - **"Event is full - Join waitlist"** badge
-   - Number of people currently on waitlist
-   - **Yellow notice banner** explaining they'll be added to waitlist
-   - Estimated waitlist position
+### Joining the Waitlist
+1. Click on an event that's at full capacity
+2. You'll see an "Event is Full - Request Waitlist" message
+3. Fill out the registration form as usual
+4. Click **"Request Waitlist"** button
+5. Staff will review your request and notify you if approved
 
-2. The registration form remains the same, but:
-   - Submit button changes to **"Join Waitlist"** (yellow color)
-   - Same information collected for waitlist members
+### Multi-Select with Waitlist
+- Multi-select registration works with full events
+- Select any combination of available and full events
+- Available events register immediately
+- Full events are added as waitlist requests
 
-3. After joining waitlist:
-   - Success message confirms waitlist registration
-   - Staff will be notified to contact them if spots open up
+## For Staff
 
-#### Multi-Select with Full Events:
-- Multi-select feature works with waitlist
-- Users can select mix of available events and full events
-- Bulk registration will:
-  - Register for available events
-  - Add to waitlist for full events
+### Managing Waitlist (Admin Dashboard)
 
-### For Staff/Admin
+Access the **Waitlist Manager** from the Attendance tab:
 
-#### Waitlist Management Interface:
-Staff can access the **Waitlist Manager** for any event:
+1. **Capacity Dashboard** - Shows total capacity, registered count, and waitlist count
+2. **Registered Participants** - View confirmed registrations with cancel option
+3. **On Waitlist** - Approved waitlist members with position numbers
+4. **Pending Requests** - New requests awaiting staff review
 
-**Dashboard Shows:**
-- 📊 **Capacity Summary**
-  - Total capacity
-  - Number registered
-  - Number on waitlist
-  - Available spots for promotion
+### Workflow
 
-- ✅ **Registered Participants List**
-  - All confirmed registrations
-  - Option to cancel registrations (opens spot for waitlist)
+1. **Review Requests**: See new waitlist requests in "Pending Requests"
+2. **Approve/Reject**: Click approve to add to waitlist queue, or reject to deny
+3. **Promote**: When spots open, click "Promote" to move waitlist members to registered
 
-- ⏰ **Waitlist Queue**
-  - Ordered list by join time
-  - Position numbers (1st, 2nd, 3rd, etc.)
-  - One-click promotion to registered status
+## Status Reference
 
-#### Promoting from Waitlist:
-1. When a spot opens (via cancellation or capacity increase):
-   - Staff sees promotion is available
-   - Click **"Promote"** button next to waitlist member
-   - System automatically:
-     - Changes status from 'waitlist' to 'registered'
-     - Updates event capacity counts
-     - Reorders remaining waitlist positions
-     - Records promotion timestamp
+| Status | Description |
+|--------|-------------|
+| `waitlist` (no position) | Pending request awaiting staff review |
+| `waitlist` (with position) | Approved and in queue |
+| `registered` | Confirmed registration |
+| `rejected` | Request denied by staff |
 
-2. The promoted user:
-   - Moves from waitlist to registered list
-   - Can be contacted by staff about the spot opening
+## Google Sheets Columns
 
-## Technical Implementation
+**Registrations Sheet:**
+- `Status` - Include 'waitlist' and 'rejected' options
+- `WaitlistPosition` - Position in queue (1, 2, 3...)
+- `PromotedAt` - Timestamp when promoted from waitlist
 
-### Database Schema (Google Sheets)
+**Events Sheet:**
+- `CurrentWaitlist` - Count of approved waitlist members
 
-#### Registrations Sheet - New Columns:
-- **Column I**: `status` - Now includes 'waitlist' option
-- **Column J**: `waitlistPosition` - Position in queue (1, 2, 3, etc.)
-- **Column Q**: `promotedAt` - Timestamp when promoted from waitlist
-
-#### Events Sheet - New Column:
-- **Column U**: `currentWaitlist` - Count of waitlist members
-
-### API Endpoints
-
-#### POST `/api/registrations`
-**Enhanced to handle waitlist:**
-```typescript
-// When event is full:
-- Set status = 'waitlist'
-- Calculate waitlistPosition
-- Increment event.currentWaitlist
-- Don't increment event.currentSignups
-```
-
-#### POST `/api/registrations/promote`
-**New endpoint for promotion:**
-```typescript
-{
-  registrationId: string,
-  eventId: string
-}
-// Returns: Success/error message
-```
-
-#### PATCH `/api/registrations/:id`
-**Cancel registration:**
-- Changes status to 'cancelled'
-- Decrements event.currentSignups
-- Opens spot for promotion
-
-### Components
-
-#### `WaitlistManager.tsx`
-**Admin interface showing:**
-- Registered participants with cancel option
-- Waitlist queue with promote option
-- Real-time capacity tracking
-- Visual position indicators
-
-#### `SignUpModal.tsx`
-**Enhanced with:**
-- Full event detection
-- Waitlist notice banner
-- Dynamic button text and color
-- Waitlist position estimation
-
-### Business Logic
-
-#### Automatic Waitlist Assignment:
-```typescript
-if (eventCapacity && currentSignups >= eventCapacity) {
-  status = 'waitlist';
-  waitlistPosition = currentWaitlist + 1;
-} else {
-  status = 'registered';
-}
-```
-
-#### Promotion Logic:
-```typescript
-// When promoting:
-1. Check event has available capacity
-2. Change registration status: waitlist → registered
-3. Increment event.currentSignups
-4. Decrement event.currentWaitlist
-5. Reorder remaining waitlist positions
-6. Record promotedAt timestamp
-```
-
-#### Position Reordering:
-When someone is promoted or leaves waitlist:
-- All members below them move up one position
-- Maintains FIFO (First In, First Out) order
 
 ## User Stories
 

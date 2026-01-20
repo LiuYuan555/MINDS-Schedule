@@ -56,6 +56,8 @@ This platform uses **Clerk** for authentication, providing:
 - **🚫 No Hardcoded Credentials** - No passwords stored in code or environment variables for admin access
 - **✅ Protected API Endpoints** - POST/PUT/DELETE operations on sensitive routes require admin authentication
 - **🔑 Clerk-Managed Sessions** - Secure session handling with automatic token refresh
+- **⚡ Rate Limiting** - API endpoints protected against brute force and DDoS attacks
+- **🧹 Input Validation & Sanitization** - All user inputs validated with Zod and sanitized to prevent injection attacks
 
 ## 🚀 Getting Started
 

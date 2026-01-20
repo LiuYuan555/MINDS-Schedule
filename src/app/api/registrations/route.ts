@@ -2,6 +2,8 @@ import { google } from 'googleapis';
 import { NextRequest, NextResponse } from 'next/server';
 import { sendConfirmationSMS, formatConfirmationMessage, getDefaultMessageTemplate } from '@/lib/sms';
 import { sendConfirmationEmail } from '@/lib/email';
+import { checkRateLimit, rateLimitResponse } from '@/lib/rateLimit';
+import { registrationSchema } from '@/lib/validation';
 
 async function getGoogleSheetsClient() {
   const credentials = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
@@ -23,6 +25,10 @@ async function getGoogleSheetsClient() {
 
 // GET /api/registrations - Get registrations for a user or event
 export async function GET(request: NextRequest) {
+  // Rate limit check
+  const { success } = checkRateLimit(request, '/api/registrations');
+  if (!success) return rateLimitResponse();
+
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
@@ -75,8 +81,20 @@ export async function GET(request: NextRequest) {
 
 // POST /api/registrations - Create a new registration
 export async function POST(request: NextRequest) {
+  // Rate limit check
+  const { success } = checkRateLimit(request, '/api/registrations');
+  if (!success) return rateLimitResponse();
+
   try {
     const body = await request.json();
+    
+    // Validate and sanitize input
+    const parseResult = registrationSchema.safeParse(body);
+    if (!parseResult.success) {
+      const errorMessages = parseResult.error.issues.map((e) => e.message).join(', ');
+      return NextResponse.json({ error: `Validation failed: ${errorMessages}` }, { status: 400 });
+    }
+    
     const {
       eventId,
       eventTitle,
@@ -93,11 +111,7 @@ export async function POST(request: NextRequest) {
       hasCaregiverAccompanying,
       caregiverName,
       caregiverPhone,
-    } = body;
-
-    if (!eventId || !eventTitle || !userId || !userName || !userEmail || !registrationType) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
-    }
+    } = parseResult.data;
 
     // Reject guest signups - userId must start with 'user_' (registered users)
     if (!userId.startsWith('user_')) {
@@ -406,6 +420,10 @@ export async function POST(request: NextRequest) {
 
 // PUT /api/registrations - Update registration status (for attendance tracking)
 export async function PUT(request: NextRequest) {
+  // Rate limit check
+  const { success } = checkRateLimit(request, '/api/registrations');
+  if (!success) return rateLimitResponse();
+
   try {
     const body = await request.json();
     const { registrationId, status } = body;
@@ -512,6 +530,10 @@ export async function PUT(request: NextRequest) {
 
 // DELETE /api/registrations - Remove a registration and log to removal history
 export async function DELETE(request: NextRequest) {
+  // Rate limit check
+  const { success } = checkRateLimit(request, '/api/registrations');
+  if (!success) return rateLimitResponse();
+
   try {
     const { searchParams } = new URL(request.url);
     const registrationId = searchParams.get('registrationId');

@@ -2,6 +2,14 @@ import { google } from 'googleapis';
 import { NextRequest, NextResponse } from 'next/server';
 import { isAdmin } from '@/lib/adminAuth';
 
+// Helper function to strip leading single quote (Google Sheets text formatting artifact)
+function stripLeadingQuote(value: string): string {
+  if (value && value.startsWith("'")) {
+    return value.substring(1);
+  }
+  return value;
+}
+
 // Helper function to get Google Sheets client
 async function getGoogleSheetsClient() {
   const credentials = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
@@ -71,7 +79,7 @@ export async function GET() {
       
       return {
         id: row[0] || '',
-        title: row[1] || '',
+        title: stripLeadingQuote(row[1] || ''),
         description: row[2] || '',
         date,
         time,

@@ -80,9 +80,14 @@ export default function Calendar({ events, onEventClick, multiSelectMode = false
     while (day <= endDate) {
       for (let i = 0; i < 7; i++) {
         const currentDay = day;
-        const dayEvents = events.filter((event) =>
-          isSameDay(parseISO(event.date), currentDay)
-        );
+        const dayEvents = events
+          .filter((event) => isSameDay(parseISO(event.date), currentDay))
+          .sort((a, b) => {
+            // Sort by time (earliest first)
+            const timeA = a.time || '00:00';
+            const timeB = b.time || '00:00';
+            return timeA.localeCompare(timeB);
+          });
 
         days.push(
           <div
@@ -102,8 +107,8 @@ export default function Calendar({ events, onEventClick, multiSelectMode = false
             >
               {format(day, 'd')}
             </span>
-            <div className="mt-1 space-y-1">
-              {dayEvents.slice(0, 2).map((event) => {
+            <div className="mt-1 space-y-1 max-h-[80px] overflow-y-auto">
+              {dayEvents.map((event) => {
                 const isSelected = selectedEvents.some(e => e.id === event.id);
                 const isEventFull = event.capacity !== undefined && event.currentSignups !== undefined && event.currentSignups >= event.capacity;
                 return (
@@ -123,15 +128,10 @@ export default function Calendar({ events, onEventClick, multiSelectMode = false
                     {multiSelectMode && isSelected && <span className="mr-1">✓</span>}
                     {isEventFull && <span className="mr-1" title="Event is full - Waitlist available">⚠️</span>}
                     {event.isRecurring && <span className="mr-1">🔄</span>}
-                    {event.title}
+                    {event.time} {event.title}
                   </button>
                 );
               })}
-              {dayEvents.length > 2 && (
-                <div className="text-xs text-gray-500 pl-1">
-                  +{dayEvents.length - 2} more
-                </div>
-              )}
             </div>
           </div>
         );

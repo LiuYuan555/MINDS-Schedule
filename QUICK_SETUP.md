@@ -20,6 +20,16 @@ npm install
 2. Create a new application
 3. Copy your API keys
 
+### Set Up Admin Access
+
+To grant admin access to staff members:
+
+1. Sign in to [Clerk Dashboard](https://dashboard.clerk.com/)
+2. Go to **Users** and select the staff user
+3. Scroll to **Public metadata** and click **Edit**
+4. Add: `{"role": "admin"}`
+5. Click **Save**
+
 ## Step 3: Set Up Google Sheets
 
 ### Create Google Cloud Project
@@ -68,16 +78,13 @@ From URL: `https://docs.google.com/spreadsheets/d/[SPREADSHEET_ID]/edit`
 Create `.env.local`:
 
 ```bash
-# Clerk Authentication
+# Clerk Authentication (Required)
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_...
 CLERK_SECRET_KEY=sk_...
 
-# Google Sheets
+# Google Sheets (Required)
 GOOGLE_SERVICE_ACCOUNT_KEY='{"type":"service_account",...}'  # Paste entire JSON
 GOOGLE_SPREADSHEET_ID=your_spreadsheet_id
-
-# Admin Panel
-ADMIN_PASSWORD=your_secure_password
 
 # Optional: Email (Resend)
 RESEND_API_KEY=re_...
@@ -102,7 +109,7 @@ Open [http://localhost:3000](http://localhost:3000)
 - [ ] Can sign in with Clerk
 - [ ] Can register for an event
 - [ ] Registration appears in Google Sheet
-- [ ] Admin panel works at `/admin`
+- [ ] Admin panel works at `/admin` (requires admin role in Clerk)
 
 ## Troubleshooting
 
@@ -118,6 +125,9 @@ Open [http://localhost:3000](http://localhost:3000)
 - Sheet must be named exactly **Events** (capital E)
 - Same for **Registrations** and **Users**
 
+**"Access Denied" on admin page**
+- Ensure user has `{"role": "admin"}` in Clerk public metadata
+- Sign out and sign back in after adding the role
 
 ### Issue: "Invalid JSON in environment variable"
 **Fix:**
@@ -219,7 +229,7 @@ Once Google Sheets is integrated:
 If everything works, you should see:
 - Events loading from Google Sheets
 - Registrations saving to Registrations sheet
-- Real-time updates across all users
+- Admin panel accessible to users with admin role
 - Data persisting after server restart
 
 Welcome to the MINDS Schedule system! 🚀

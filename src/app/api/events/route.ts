@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { NextRequest, NextResponse } from 'next/server';
+import { isAdmin } from '@/lib/adminAuth';
 
 // Helper function to get Google Sheets client
 async function getGoogleSheetsClient() {
@@ -36,11 +37,9 @@ function calculateEventStatus(date: string, endTime: string, startTime: string):
   
   try {
     const now = new Date();
-    // Use endTime if available, otherwise fall back to startTime
     const timeToUse = endTime || startTime;
     const eventEndDateTime = new Date(`${date}T${timeToUse}`);
     
-    // If the date/time parsing failed, default to ongoing
     if (isNaN(eventEndDateTime.getTime())) {
       return 'ongoing';
     }
@@ -58,7 +57,7 @@ export async function GET() {
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'Events!A2:V', // Extended range to include EventStatus column
+      range: 'Events!A2:V',
     });
 
     const rows = response.data.values || [];
@@ -68,7 +67,6 @@ export async function GET() {
       const time = row[4] || '';
       const endTime = row[5] || '';
       
-      // Calculate event status server-side for accuracy (fallback from Google Sheets formula)
       const eventStatus = calculateEventStatus(date, endTime, time);
       
       return {
@@ -93,14 +91,13 @@ export async function GET() {
         recurringGroupId: row[18] || undefined,
         isRecurring: row[19] === 'true',
         confirmationMessage: row[20] || undefined,
-        eventStatus, // Calculated server-side for real-time accuracy
+        eventStatus,
       };
     });
 
     return NextResponse.json({ events });
   } catch (error) {
     console.error('Error fetching events:', error);
-    // Return sample events if Google Sheets is not configured
     const { sampleEvents } = await import('@/data/events');
     return NextResponse.json({ events: sampleEvents });
   }
@@ -108,6 +105,11 @@ export async function GET() {
 
 // POST /api/events - Add a new event or multiple recurring events
 export async function POST(request: NextRequest) {
+  // Admin check
+  if (!(await isAdmin())) {
+    return NextResponse.json({ error: 'Unauthorized - Admin access required' }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
     const { 
@@ -263,6 +265,11 @@ export async function POST(request: NextRequest) {
 
 // DELETE /api/events - Delete an event
 export async function DELETE(request: NextRequest) {
+  // Admin check
+  if (!(await isAdmin())) {
+    return NextResponse.json({ error: 'Unauthorized - Admin access required' }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const eventId = searchParams.get('id');
@@ -326,6 +333,11 @@ export async function DELETE(request: NextRequest) {
 
 // PUT /api/events - Update an existing event
 export async function PUT(request: NextRequest) {
+  // Admin check
+  if (!(await isAdmin())) {
+    return NextResponse.json({ error: 'Unauthorized - Admin access required' }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
     const { 

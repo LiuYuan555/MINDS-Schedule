@@ -276,9 +276,6 @@ export default function Home() {
               <a href="/volunteer" className="text-green-600 hover:text-green-800 font-medium">
                 {t('userPortal', 'volunteerPortal')}
               </a>
-              <a href="/admin" className="text-gray-600 hover:text-gray-800">
-                {t('userPortal', 'staffLogin')}
-              </a>
             </nav>
           </div>
         </div>

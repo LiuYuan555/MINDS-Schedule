@@ -29,7 +29,7 @@ A modern, accessible event scheduling and registration platform built for MINDS 
 - 📊 **Volunteer Dashboard** - Track registered events and volunteer commitments
 
 ### For Staff/Administrators
-- 🔐 **Secure Admin Panel** - Password-protected staff portal
+- 🔐 **Secure Admin Panel** - Role-based access control via Clerk authentication
 - ➕ **Event Management** - Create, edit, and delete events with full control
 - 🔄 **Recurring Events** - Create recurring event series
 - ✅ **Attendance Tracking** - Mark participants as attended, absent, or cancelled
@@ -40,13 +40,22 @@ A modern, accessible event scheduling and registration platform built for MINDS 
 - 📝 **Custom SMS Messages** - Set custom confirmation messages per event
 - 📊 **Removal History** - Track participant removals and cancellations
 
-## 🔐 Authentication
+## 🔐 Authentication & Security
 
 This platform uses **Clerk** for authentication, providing:
 - Secure sign-in/sign-up flows
-- Social login options
+- Social login options (Google, etc.)
 - User profile management
 - Session management
+- **Role-based access control** for admin features
+
+### Security Features
+
+- **🔒 Role-Based Admin Access** - Admin panel requires `role: admin` in Clerk user metadata
+- **🛡️ Server-Side Authorization** - All admin API routes verify user roles server-side
+- **🚫 No Hardcoded Credentials** - No passwords stored in code or environment variables for admin access
+- **✅ Protected API Endpoints** - POST/PUT/DELETE operations on sensitive routes require admin authentication
+- **🔑 Clerk-Managed Sessions** - Secure session handling with automatic token refresh
 
 ## 🚀 Getting Started
 
@@ -133,49 +142,33 @@ npm run dev
 
 **URL:** `http://localhost:3000/admin`
 
-**Default Password:** `mindspassword` (change in production!)
+**Access:** Requires Clerk account with `role: admin` in public metadata (see Admin Setup below)
+
+#### Admin Setup
+
+1. Sign in to [Clerk Dashboard](https://dashboard.clerk.com/)
+2. Go to **Users** and select the staff user
+3. Scroll to **Public metadata** and click **Edit**
+4. Add the following JSON:
+   ```json
+   {
+     "role": "admin"
+   }
+   ```
+5. Click **Save**
+
+The user can now access the admin panel at `/admin`.
 
 #### Events Tab
-1. **Add New Event**
-   - Click "+ Add New Event"
-   - Fill in event details:
-     - Title, Description, Category
-     - Date, Start Time, End Time
-     - Location, Capacity
-     - Volunteer slots needed
-     - Skill level requirement
-     - Age restrictions
-   - Set accessibility options:
-     - ♿ Wheelchair Accessible
-     - 👥 Caregiver Required
-     - 💰 Caregiver Payment Required (with amount)
-   - Set custom SMS/Email confirmation message
-   - Click "Add Event" to save
-
-2. **Edit Event**
-   - Click "Edit" on any event card
-   - Modify details and save
-
-3. **Delete Event**
-   - Click "Delete" on any event card
-   - Confirm deletion
-
-4. **Recurring Events**
-   - Create events that repeat on a schedule
-   - Manage the entire series or individual occurrences
+- **Add New Event** - Create events with full details
+- **Edit Event** - Modify existing events
+- **Delete Event** - Remove events
+- **Recurring Events** - Create event series
 
 #### Attendance Tab
-1. **Select an Event** from the dropdown
-2. **View Registrations** - See all participants and volunteers
-3. **Update Status** - Change each registration to:
-   - Registered (default)
-   - Waitlist
-   - Attended
-   - Absent
-   - Cancelled
-   - Rejected
-4. **Manage Waitlist** - Promote or reject waitlist entries
-5. **View Statistics** - See totals for registered, attended, participants, volunteers
+- **View Registrations** - See all participants and volunteers
+- **Update Status** - Mark as Registered, Attended, Absent, Cancelled
+- **Manage Waitlist** - Promote or reject waitlist entries
 
 #### Users Tab
 - View and manage all users
@@ -183,39 +176,11 @@ npm run dev
 - Update membership types
 - Restrict or activate users
 
-#### Calendar View Tab
-- Visual monthly calendar showing all events
-- Click on an event to jump to attendance tracking
-- Navigate between months using Prev/Next buttons
-
 #### Statistics Tab
 - Week-over-week performance comparison
 - Attendance rates and cancellation rates
 - Category performance breakdown
 - Top performing events
-- Inactive participant tracking
-- Caregiver vs self-registration breakdown
-
-## 📊 Event Fields Reference
-
-| Field | Description | Required |
-|-------|-------------|----------|
-| Title | Event name | Yes |
-| Description | Event details | Yes |
-| Category | Workshop, Outdoor Activity, Fitness, etc. | Yes |
-| Date | Event date (YYYY-MM-DD) | Yes |
-| Time | Start time (e.g., "10:00 AM") | Yes |
-| End Time | End time | No |
-| Location | Venue/address | Yes |
-| Capacity | Maximum participants | No |
-| Volunteers Needed | Number of volunteer slots | No |
-| Skill Level | all, beginner, intermediate, advanced | No |
-| Age Restriction | e.g., "18+", "12-18" | No |
-| Wheelchair Accessible | Boolean | No (default: true) |
-| Caregiver Required | Boolean | No (default: false) |
-| Caregiver Payment Required | Boolean | No (default: false) |
-| Caregiver Payment Amount | Amount in dollars | No |
-| Confirmation Message | Custom SMS/Email message | No |
 
 ## ⚙️ Configuration
 
@@ -227,9 +192,6 @@ Create a `.env.local` file with the following:
 # Google Sheets (Required)
 GOOGLE_SERVICE_ACCOUNT_KEY={"type":"service_account",...}  # Paste entire JSON as one line
 GOOGLE_SPREADSHEET_ID=your_spreadsheet_id  # From the sheet URL
-
-# Admin Panel (Required)
-ADMIN_PASSWORD=your_secure_password  # For admin panel access
 
 # Clerk Authentication (Required)
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_...
@@ -328,12 +290,9 @@ src/
 │       │   └── history/route.ts
 │       ├── users/
 │       │   └── route.ts      # Users management API
-│       ├── user/
-│       │   ├── membership/route.ts
-│       │   └── status/route.ts
-│       └── admin/
-│           └── auth/
-│               └── route.ts  # Admin authentication
+│       └── user/
+│           ├── membership/route.ts
+│           └── status/route.ts
 ├── components/
 │   ├── Calendar.tsx          # Calendar view component
 │   ├── EventList.tsx         # List view component
@@ -342,17 +301,45 @@ src/
 │   ├── WaitlistManager.tsx   # Waitlist management component
 │   ├── UserManagement.tsx    # User management component
 │   ├── LanguageProvider.tsx  # i18n context provider
-│   ├── AccessControlProvider.tsx
-│   └── AccessControlWrapper.tsx
+│   ├── AccessControlProvider.tsx  # User access control
+│   └── AccessControlWrapper.tsx   # Access control HOC
 ├── data/
 │   └── events.ts             # Category colors and configuration
 ├── lib/
+│   ├── adminAuth.ts          # Admin role verification
 │   ├── translations.ts       # English/Chinese translations
 │   ├── email.ts              # Resend email integration
 │   └── sms.ts                # Twilio SMS integration
 └── types/
     └── index.ts              # TypeScript type definitions
 ```
+
+## 🔒 Security Architecture
+
+### Authentication Flow
+
+```
+User Request → Clerk Authentication → Role Verification → API Access
+```
+
+### Admin Access Control
+
+| Layer | Protection |
+|-------|------------|
+| **Frontend** | Admin page checks `user.publicMetadata.role === 'admin'` |
+| **API Routes** | Server-side `isAdmin()` function verifies Clerk session and role |
+| **Database** | Google Sheets accessed only via authenticated service account |
+
+### Protected API Endpoints
+
+| Endpoint | GET | POST | PUT | DELETE |
+|----------|-----|------|-----|--------|
+| `/api/events` | Public | Admin | Admin | Admin |
+| `/api/registrations` | Auth | Auth | Admin | Admin |
+| `/api/users` | Admin | Auth | Admin | Admin |
+| `/api/registrations/approve-waitlist` | - | Admin | - | - |
+| `/api/registrations/reject-waitlist` | - | Admin | - | - |
+| `/api/registrations/promote` | - | Admin | - | - |
 
 ## 🎨 Categories
 
@@ -376,53 +363,46 @@ The platform supports:
 - **English** (default)
 - **Chinese (中文)**
 
-Users can toggle language using the language switcher in the header. Translations are managed in `src/lib/translations.ts`.
+Users can toggle language using the language switcher in the header.
 
 ## 📧 Notifications
 
 ### Email (Resend)
 - Free tier: 3,000 emails/month
 - Automatic confirmation emails on registration
-- Customizable message templates
 
 ### SMS (Twilio)
 - Requires Twilio account
 - SMS confirmations sent to Singapore phone numbers (+65)
-- Custom per-event confirmation messages
-
-## 🔒 Security Notes
-
-For production deployment:
-
-1. **Change the admin password** - Update `ADMIN_PASSWORD` in environment variables
-2. **Use HTTPS** - Ensure all traffic is encrypted
-3. **Configure Clerk properly** - Set up allowed domains and authentication rules
-4. **Rate limiting** - Add rate limiting to API routes
-5. **Input validation** - All user inputs are validated but review for your needs
-6. **Environment variables** - Never commit `.env.local` to version control
 
 ## 🚀 Deployment
 
-This app can be deployed to Vercel, Netlify, or any platform that supports Next.js:
-
-```bash
-npm run build
-```
-
 ### Vercel (Recommended)
+
 1. Push code to GitHub
 2. Connect repository to Vercel
 3. Add environment variables in Vercel dashboard
 4. Deploy
 
-Remember to set all environment variables in your hosting platform's settings.
+```bash
+npm run build
+```
+
+### Security Checklist for Production
+
+- [ ] Configure Clerk production keys
+- [ ] Set up allowed domains in Clerk
+- [ ] Add admin role to staff users in Clerk Dashboard
+- [ ] Use HTTPS for all traffic
+- [ ] Review and restrict Google Sheets service account permissions
+- [ ] Never commit `.env.local` to version control
 
 ## 🛠 Tech Stack
 
 - [Next.js 15](https://nextjs.org/) - React framework with App Router
 - [TypeScript](https://www.typescriptlang.org/) - Type safety
 - [Tailwind CSS](https://tailwindcss.com/) - Utility-first styling
-- [Clerk](https://clerk.dev/) - Authentication & user management
+- [Clerk](https://clerk.dev/) - Authentication & role-based access control
 - [date-fns](https://date-fns.org/) - Date manipulation
 - [Google Sheets API](https://developers.google.com/sheets/api) - Backend storage
 - [Resend](https://resend.com/) - Email notifications
@@ -437,7 +417,6 @@ Remember to set all environment variables in your hosting platform's settings.
 - [Caregiver Feature](CAREGIVER_FEATURE.md)
 - [Multi-Select Feature](MULTI_SELECT_FEATURE.md)
 - [Recurring Events](RECURRING_EVENTS_FEATURE.md)
-- [User Management](FIX_USERS_SHEET.md)
 
 ## 📄 License
 

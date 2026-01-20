@@ -1,6 +1,7 @@
 import { google } from 'googleapis';
 import { NextRequest, NextResponse } from 'next/server';
 import { User, UserRole, UserStatus, MembershipType } from '@/types';
+import { isAdmin } from '@/lib/adminAuth';
 
 async function getGoogleSheetsClient() {
   const credentials = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
@@ -42,10 +43,17 @@ function parseUserRow(row: string[]): User {
 
 // GET /api/users - Get all users or a specific user
 export async function GET(request: NextRequest) {
+  // Admin check - only admins can list all users
+  const { searchParams } = new URL(request.url);
+  const userId = searchParams.get('userId');
+  const email = searchParams.get('email');
+  
+  // Allow fetching own user data, but require admin for listing all users
+  if (!userId && !email && !(await isAdmin())) {
+    return NextResponse.json({ error: 'Unauthorized - Admin access required' }, { status: 401 });
+  }
+
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-    const email = searchParams.get('email');
     const status = searchParams.get('status');
 
     const { sheets, spreadsheetId } = await getGoogleSheetsClient();
@@ -145,6 +153,11 @@ export async function POST(request: NextRequest) {
 
 // PUT /api/users - Update user details (status, role, membership, etc.)
 export async function PUT(request: NextRequest) {
+  // Admin check
+  if (!(await isAdmin())) {
+    return NextResponse.json({ error: 'Unauthorized - Admin access required' }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
     const { userId, updates, adminId } = body;
@@ -204,6 +217,11 @@ export async function PUT(request: NextRequest) {
 
 // DELETE /api/users - Delete a user
 export async function DELETE(request: NextRequest) {
+  // Admin check
+  if (!(await isAdmin())) {
+    return NextResponse.json({ error: 'Unauthorized - Admin access required' }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');

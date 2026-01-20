@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useUser, SignInButton, useClerk } from '@clerk/nextjs';
 import { Event, Registration } from '@/types';
 import { categoryColors } from '@/data/events';
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, startOfWeek, endOfWeek, addMonths, subMonths, isToday, isSameMonth, subWeeks, isWithinInterval, differenceInDays } from 'date-fns';
@@ -576,12 +577,13 @@ function StatisticsDashboard({ events, registrations }: { events: Event[]; regis
 }
 
 export default function AdminPage() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [password, setPassword] = useState('');
-  const [authError, setAuthError] = useState('');
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const { user, isLoaded, isSignedIn } = useUser();
+  const { signOut } = useClerk();
+  
+  // Check if user has admin role
+  const isAdmin = user?.publicMetadata?.role === 'admin';
+  
   const [activeTab, setActiveTab] = useState<TabType>('calendar');
-
   const [events, setEvents] = useState<Event[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [removalHistory, setRemovalHistory] = useState<any[]>([]);
@@ -601,15 +603,13 @@ export default function AdminPage() {
   const [attendanceSortBy, setAttendanceSortBy] = useState<'date' | 'category' | 'name'>('date');
   const [attendanceSortOrder, setAttendanceSortOrder] = useState<'asc' | 'desc'>('desc');
 
+  // Fetch data when user is authenticated and is admin
   useEffect(() => {
-    const storedAuth = localStorage.getItem('adminAuthenticated');
-    if (storedAuth === 'true') {
-      setIsAuthenticated(true);
+    if (isLoaded && isSignedIn && isAdmin) {
       fetchEvents();
       fetchRegistrations();
     }
-    setIsCheckingAuth(false);
-  }, []);
+  }, [isLoaded, isSignedIn, isAdmin]);
 
   // Fetch removal history when events are expanded
   useEffect(() => {
@@ -643,37 +643,6 @@ export default function AdminPage() {
       return () => clearTimeout(timer);
     }
   }, [message]);
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError('');
-
-    try {
-      const response = await fetch('/api/admin/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
-      });
-
-      if (response.ok) {
-        setIsAuthenticated(true);
-        localStorage.setItem('adminAuthenticated', 'true');
-        fetchEvents();
-        fetchRegistrations();
-      } else {
-        setAuthError('Incorrect password. Please try again.');
-      }
-    } catch (error) {
-      console.error('Auth error:', error);
-      setAuthError('An error occurred. Please try again.');
-    }
-  };
-
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    localStorage.removeItem('adminAuthenticated');
-    setPassword('');
-  };
 
   const fetchEvents = async () => {
     try {
@@ -810,7 +779,6 @@ export default function AdminPage() {
 
       if (response.ok) {
         setRegistrations(registrations.filter((r) => r.id !== registration.id));
-        // Refresh removal history for the event
         if (registration.eventId && expandedEventIds.has(registration.eventId)) {
           fetchRemovalHistory(registration.eventId);
         }
@@ -836,7 +804,7 @@ export default function AdminPage() {
 
   // Calendar calculations
   const monthStart = startOfMonth(calendarMonth);
-  const monthEnd = endOfMonth(calendarMonth);
+  const monthEnd = endOfMonth(monthStart);
   const calendarStart = startOfWeek(monthStart);
   const calendarEnd = endOfWeek(monthEnd);
   const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
@@ -845,7 +813,8 @@ export default function AdminPage() {
     return events.filter((event) => event.eventStatus !== 'past' && isSameDay(parseISO(event.date), day));
   };
 
-  if (isCheckingAuth) {
+  // Loading state
+  if (!isLoaded) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -853,45 +822,24 @@ export default function AdminPage() {
     );
   }
 
-  if (!isAuthenticated) {
+  // Not signed in - show sign in prompt
+  if (!isSignedIn) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-            </div>
-            <h1 className="text-2xl font-bold text-gray-800">MINDS Staff Portal</h1>
-            <p className="text-gray-500 text-sm mt-2">Enter password to access admin panel</p>
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
           </div>
-          <form onSubmit={handleLogin} className="space-y-4">
-            {authError && (
-              <div className="bg-red-50 text-red-700 p-3 rounded-lg text-sm flex items-center gap-2">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                {authError}
-              </div>
-            )}
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-              <input
-                type="password"
-                id="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-gray-800 transition-shadow"
-                placeholder="Enter your password"
-                required
-              />
-            </div>
-            <button type="submit" className="w-full bg-blue-600 text-white py-3 px-4 rounded-xl hover:bg-blue-700 transition-colors font-medium">
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">MINDS Staff Portal</h1>
+          <p className="text-gray-500 text-sm mb-6">Please sign in to access the admin dashboard</p>
+          <SignInButton mode="modal">
+            <button className="w-full bg-blue-600 text-white py-3 px-4 rounded-xl hover:bg-blue-700 transition-colors font-medium">
               Sign In
             </button>
-          </form>
-          <div className="mt-6 text-center">
+          </SignInButton>
+          <div className="mt-6">
             <a href="/" className="text-blue-600 hover:text-blue-800 text-sm font-medium">← Back to Calendar</a>
           </div>
         </div>
@@ -899,6 +847,36 @@ export default function AdminPage() {
     );
   }
 
+  // Signed in but not admin - show access denied
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-100 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Access Denied</h1>
+          <p className="text-gray-500 text-sm mb-2">You don&apos;t have permission to access the admin dashboard.</p>
+          <p className="text-gray-400 text-xs mb-6">Signed in as: {user?.emailAddresses[0]?.emailAddress}</p>
+          <div className="flex flex-col gap-3">
+            <a href="/" className="w-full bg-blue-600 text-white py-3 px-4 rounded-xl hover:bg-blue-700 transition-colors font-medium">
+              Go to Home Page
+            </a>
+            <button 
+              onClick={() => signOut()}
+              className="w-full bg-gray-100 text-gray-700 py-3 px-4 rounded-xl hover:bg-gray-200 transition-colors font-medium"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Admin user - show dashboard
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
@@ -928,10 +906,13 @@ export default function AdminPage() {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-500 hidden sm:block">
+                {user?.firstName || user?.emailAddresses[0]?.emailAddress}
+              </span>
               <a href="/" className="text-gray-600 hover:text-gray-800 text-sm font-medium hidden sm:block">
                 View Public Site →
               </a>
-              <button onClick={handleLogout} className="text-red-600 hover:text-red-800 text-sm font-medium">
+              <button onClick={() => signOut()} className="text-red-600 hover:text-red-800 text-sm font-medium">
                 Logout
               </button>
             </div>

@@ -11,6 +11,7 @@ import {
 import "./globals.css";
 import { AccessControlWrapper } from "@/components/AccessControlWrapper";
 import { LanguageProvider } from "@/components/LanguageProvider";
+import { LogoWithHiddenAccess } from "@/components/Logo";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -32,7 +33,7 @@ export default function RootLayout({
             <AccessControlWrapper>
               <header className="bg-white shadow-sm border-b">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-16">
-                  <a href="/" className="text-xl font-bold text-blue-600">MINDS Singapore</a>
+                  <LogoWithHiddenAccess />
                   <div className="flex items-center space-x-4">
                     <SignedIn>
                       <a href="/my-events" className="text-gray-700 hover:text-blue-600 text-sm font-medium">

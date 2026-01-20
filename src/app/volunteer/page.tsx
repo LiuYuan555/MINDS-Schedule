@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useUser, SignInButton, SignUpButton, UserButton } from '@clerk/nextjs';
+import { useUser, SignInButton } from '@clerk/nextjs';
 import { Event } from '@/types';
 import { categoryColors } from '@/data/events';
 import { format, parseISO } from 'date-fns';
@@ -92,8 +92,8 @@ export default function VolunteerPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
+      {/* Page Title Section */}
+      <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
@@ -105,29 +105,10 @@ export default function VolunteerPage() {
               <a href="/" className="text-blue-600 hover:text-blue-800 text-sm">
                 {t('common', 'backToCalendar')}
               </a>
-              {isLoaded && user ? (
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-gray-600">{t('common', 'welcome')}, {user.firstName || t('common', 'volunteer')}</span>
-                  <UserButton afterSignOutUrl="/volunteer" />
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <SignInButton mode="modal">
-                    <button className="px-4 py-2 text-sm text-green-600 border border-green-600 rounded-lg hover:bg-green-50">
-                      {t('common', 'signIn')}
-                    </button>
-                  </SignInButton>
-                  <SignUpButton mode="modal">
-                    <button className="px-4 py-2 text-sm text-white bg-green-600 rounded-lg hover:bg-green-700">
-                      {t('common', 'signUp')}
-                    </button>
-                  </SignUpButton>
-                </div>
-              )}
             </div>
           </div>
         </div>
-      </header>
+      </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Section for New Volunteers */}

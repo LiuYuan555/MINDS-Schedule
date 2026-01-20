@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
+import { isAdmin } from '@/lib/adminAuth';
 
 // Initialize Google Sheets client
 function getGoogleSheetsClient() {
@@ -17,6 +18,14 @@ function getGoogleSheetsClient() {
 }
 
 export async function POST(request: NextRequest) {
+  // Admin check
+  if (!(await isAdmin())) {
+    return NextResponse.json(
+      { error: 'Unauthorized - Admin access required' },
+      { status: 401 }
+    );
+  }
+
   try {
     const { registrationId, eventId } = await request.json();
 
